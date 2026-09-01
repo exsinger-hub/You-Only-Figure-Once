@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scientific Figure Corrector"
+  short_description: "Turn review findings into exact object-level drawing repairs"
+  default_prompt: "Use $correct-scientific-figure to convert these review findings into minimal backend-specific correction operations."

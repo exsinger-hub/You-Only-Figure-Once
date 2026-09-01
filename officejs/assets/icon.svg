@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" role="img" aria-label="Scientific Illustrator">
+  <rect width="80" height="80" rx="16" fill="#f08705"/>
+  <path d="M18 56V25c0-3 2-5 5-5h34c3 0 5 2 5 5v31c0 3-2 5-5 5H23c-3 0-5-2-5-5Z" fill="#fff" opacity=".96"/>
+  <circle cx="31" cy="35" r="7" fill="#f08705"/>
+  <path d="M42 32h13M42 39h10M25 50h30" stroke="#f08705" stroke-width="4" stroke-linecap="round"/>
+</svg>

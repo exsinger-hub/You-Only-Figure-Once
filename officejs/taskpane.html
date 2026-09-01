@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="scientific-illustrator-token" content="__SCIENTIFIC_ILLUSTRATOR_TOKEN__">
+  <title>Scientific Illustrator Live</title>
+  <link rel="stylesheet" href="/taskpane.css">
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <script src="/taskpane.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <img src="/assets/icon-64.png" width="40" height="40" alt="">
+      <div>
+        <h1>Scientific Illustrator</h1>
+        <p>Office.js 实时绘制后端</p>
+      </div>
+    </header>
+    <section class="status-card" aria-live="polite">
+      <span id="status-dot" class="dot waiting"></span>
+      <div>
+        <strong id="status-title">正在连接本机桥接器…</strong>
+        <p id="status-detail">请让 Codex 中的 Scientific Illustrator 插件保持运行。</p>
+      </div>
+    </section>
+    <dl>
+      <div><dt>当前后端</dt><dd>Office.js + context.sync()</dd></div>
+      <div><dt>刷新方式</dt><dd>逐对象或逐检查点确认</dd></div>
+      <div><dt>画布</dt><dd>当前 PowerPoint 演示文稿</dd></div>
+    </dl>
+    <p class="note">连接后，Codex 添加的每个对象都会直接出现在当前幻灯片中。请勿关闭此任务窗格；遇到模态对话框时先将其关闭。</p>
+    <button id="reconnect" type="button">重新连接</button>
+    <footer>制作者：一个地质博士</footer>
+  </main>
+</body>
+</html>

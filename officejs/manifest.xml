@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+  xsi:type="TaskPaneApp">
+  <Id>17f06c41-8f7f-4a92-9dcf-571965576160</Id>
+  <Version>1.5.4.0</Version>
+  <ProviderName>一个地质博士</ProviderName>
+  <DefaultLocale>zh-CN</DefaultLocale>
+  <DisplayName DefaultValue="Scientific Illustrator Live" />
+  <Description DefaultValue="Use Office.js context.sync() to draw editable scientific figures object by object in the current PowerPoint deck." />
+  <IconUrl DefaultValue="https://localhost:17645/assets/icon-32.png" />
+  <HighResolutionIconUrl DefaultValue="https://localhost:17645/assets/icon-64.png" />
+  <SupportUrl DefaultValue="https://github.com/icebird1998/scientific-illustrator" />
+  <AppDomains>
+    <AppDomain>https://localhost:17645</AppDomain>
+  </AppDomains>
+  <Hosts>
+    <Host Name="Presentation" />
+  </Hosts>
+  <Requirements>
+    <Sets DefaultMinVersion="1.4">
+      <Set Name="PowerPointApi" MinVersion="1.4" />
+    </Sets>
+  </Requirements>
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:17645/taskpane.html" />
+  </DefaultSettings>
+  <Permissions>ReadWriteDocument</Permissions>
+</OfficeApp>

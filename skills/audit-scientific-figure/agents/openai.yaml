@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scientific Figure Reviewer"
+  short_description: "Review visual fidelity, routing, and editability before approval"
+  default_prompt: "Use $audit-scientific-figure to review fresh structure and renderer evidence and issue object-level findings."
