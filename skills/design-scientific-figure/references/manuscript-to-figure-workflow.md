@@ -106,6 +106,8 @@ Fix the earliest responsible artifact first, then regenerate only the affected d
 
 ## 6. Optional blinded comparison
 
+For the full sealed-target sequence, freeze receipt, comparison dimensions, and rule-promotion boundary, read [Blind Figure Gym Protocol](blind-figure-gym.md) completely.
+
 After a blind artifact is frozen and passes its pre-reveal gate, reveal the source figure and compare:
 
 - scientific semantics and causal topology;

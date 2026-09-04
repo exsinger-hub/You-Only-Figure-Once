@@ -24,11 +24,17 @@ Record:
 
 ## Derive from a manuscript
 
-When the source is a manuscript, paper PDF, method section, equations, supplementary text, or an evidence pack, read [Manuscript-to-Figure Workflow](references/manuscript-to-figure-workflow.md) completely before freezing the design. Use it for ordinary manuscript-driven design and for blind Figure Gym runs.
+When the source is a manuscript, paper PDF, method section, equations, supplementary text, or an evidence pack, read [Manuscript-to-Figure Workflow](references/manuscript-to-figure-workflow.md) completely before freezing the design.
 
 Freeze the Figure Claim, Paper Figure Signature, required-node ledger, required-edge ledger, equation-operand ledger, and evidence ledger before choosing a direction. Derive the publication slot and composition family from that contract before reference retrieval. In blinded independent design, also require a target-paper and derivative-asset exclusion receipt before retrieved assets are materialized.
 
 Do not enter publication drawing until the selected direction maps every required node and edge or records a source-grounded permitted omission. A missing operand, condition, inverse/alignment step, evidence producer, or update owner is a contract failure rather than a styling choice.
+
+### Run a blind Figure Gym comparison
+
+When the user asks to design independently without seeing an existing overview and then compare against it, read [Blind Figure Gym Protocol](references/blind-figure-gym.md) completely. Apply its sealed-target sequence in addition to the manuscript contract.
+
+Do not inspect the target figure, its caption, alt text, layout description, or derivative diagram before the editable artifact and fresh review render pass the pre-reveal gate. Record an exclusion receipt and freeze receipt in human-readable form. After reveal, preserve the blind artifact unchanged, compare communication decisions rather than pixel similarity, and put any revised response in a separately identified version.
 
 ## Build the layout system
 
@@ -92,6 +98,7 @@ Return a `design_spec` containing:
 - usable canvas bounds, meaningful-content hull, intended canvas-utilization range, and the function of each planned large whitespace region;
 - an evidence budget for overview figures that states the placement and relative visual mass of representative real results, or the scientific reason no real evidence is available;
 - for manuscript-derived work, source locations, Figure Claim, Paper Figure Signature, complete node/edge/operand/evidence ledgers, publication display width, permitted omissions, and any blind-exclusion receipt;
+- for a blind comparison, allowed and sealed source sets, a pre-reveal freeze receipt, and the intended post-reveal comparison dimensions;
 - when alternatives are requested, a style-divergence comparison showing why each direction is structurally distinct;
 - local construction order and acceptance conditions.
 
@@ -106,5 +113,7 @@ Finish only when every local region and the whole figure have exact readable sem
 ## Delivery
 
 Save the editable source and requested exports. Report the selected backend, design tokens, object counts, raster declarations, local gates, whole-figure gate, and remaining content ambiguity.
+
+For a completed blind comparison, also deliver the frozen source contract, frozen editable artifact and render, target attribution, and a post-reveal verdict that preserves what each design does better. Do not silently retrofit the blind artifact after seeing the target.
 
 In `publication` mode, remove style numbers, reference-DNA labels, selection instructions, reviewer notes, and other direction-review scaffolding from the final figure.

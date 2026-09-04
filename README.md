@@ -6,11 +6,11 @@
 
 维护者：**gatina**
 
-[案例图](#案例图两种-overview-怎么选) · [如何画 Overview](#一张-overview-是怎么画出来的) · [知识库](#知识库用了什么) · [质量判断](#怎么判断效果是否好) · [安装](#安装) · [使用](#五分钟上手)
+[盲画对比](#案例盲画后再揭晓对比) · [如何画 Overview](#一张-overview-是怎么画出来的) · [知识库](#知识库用了什么) · [质量判断](#怎么判断效果是否好) · [安装](#安装) · [使用](#五分钟上手)
 
-![SBF-Mamba topology-first overview](assets/examples/sbf-mamba-overview-topology.png)
+![Blindly designed Segment Anything overview](assets/examples/segment-anything-blind-overview.png)
 
-上图是实际工作流中的 **topology-first Overview** 渲染示例：主推理路径从左向右，训练专用目标独立放在底部，颜色用于区分共享主干、创新模块与训练分支。图中的医学缩略图仅作为输入/输出角色示意，不作为临床或定量证据。
+上图不是照着论文原图临摹的。我们选取 CCF-A 会议 ICCV 2023 的 [*Segment Anything*](https://openaccess.thecvf.com/content/ICCV2023/html/Kirillov_Segment_Anything_ICCV_2023_paper.html)，在封存其 overview、caption 和衍生图的前提下，只读摘要与官方实现，先独立画完、审完并冻结源文件，最后才揭晓官方图进行正面对比。
 
 ## 为什么需要 YOFO
 
@@ -41,43 +41,53 @@ flowchart LR
 | Reviewer | 同时检查对象结构和最新渲染，不把工具调用成功当成图形正确 | 审稿记录、通过/失败结论 |
 | Corrector | 将缺陷翻译成按对象、按顺序、可回归验证的修正 | 最小修改计划 |
 
-## 案例图：两种 Overview 怎么选
+## 案例：盲画后再揭晓对比
 
-下面两张图来自同一类 SBF-Mamba 稿件到图实践，但服务于不同的科学叙事。它们用于展示真实版式与信息密度，不是性能 benchmark，也不能仅凭 PNG 证明源文件的可编辑性。
+### 为什么选这篇论文
 
-### 方向 A：topology-first
+[*Segment Anything*](https://openaccess.thecvf.com/content/ICCV2023/html/Kirillov_Segment_Anything_ICCV_2023_paper.html) 发表于 ICCV 2023；ICCV 在 [CCF 人工智能领域推荐目录](https://www.ccf.org.cn/Academic_Evaluation/AI/)中属于 A 类会议。这个案例适合检验 Overview 能力，因为它同时包含“图像只编码一次”“多种提示”“双向特征交互”“多候选 mask 与质量预测”四层信息，既能画得极简，也能画得足够技术化。
 
-![Topology-first SBF-Mamba overview](assets/examples/sbf-mamba-overview-topology.png)
+### 实验协议：先画，后看
 
-它把“输入 → 共享编码 → 轴向建模与 A2 融合 → 重建”作为第一阅读路径，并把 two-stage training 单独放在下方。
+1. 用稳定论文 id `arXiv:2304.02643` 建立排除清单，封存论文全部图、caption、官方 `model_diagram.png` 及描述其布局的 README 段落。
+2. 盲画阶段只允许读取论文摘要，以及官方实现中的 `sam.py`、`image_encoder.py`、`prompt_encoder.py`、`mask_decoder.py` 和 `transformer.py`。
+3. 先冻结一句 Figure Claim、17 个必需节点、18 条必需关系、negative paths 与公式操作数，再比较两个低保真骨架。
+4. 选择“上下双通道汇入中央 decoder，再向右展开候选 mask”的 **converge-and-fan** 方向；完成可编辑 draw.io、最新 PNG 和结构审计后写入 freeze receipt。
+5. 只有预揭晓门禁通过后，才打开官方 overview；盲画稿不再倒改，差异另写为 post-reveal comparison。
 
-适合：论文 Figure 1、需要读者先理解端到端数据流的场景。
+完整过程可审阅：[source contract](examples/segment-anything-blind/source-contract.md) · [design spec](examples/segment-anything-blind/design-spec.md) · [post-reveal comparison](examples/segment-anything-blind/post-reveal-comparison.md) · [可编辑 draw.io 源文件](assets/examples/segment-anything-blind-overview.drawio)
 
-取舍：主干清楚、缩略图轮廓稳定，但局部创新的公式与实现细节必须留给后续子图或正文。
+### A. YOFO 盲画稿（揭晓前冻结）
 
-### 方向 B：mechanism-first
+![YOFO blind Segment Anything overview](assets/examples/segment-anything-blind-overview.png)
 
-![Mechanism-first SBF-Mamba overview](assets/examples/sbf-mamba-overview-mechanisms.png)
+这版把“昂贵图像编码一次、轻量提示可重复输入”做成上下双通道；中央深色模块是第一焦点，明确展示 token → image 与 image → token 的双向交换；右侧把 upscaled image embedding 与 mask-token MLPs 的乘积、三个候选 mask 及 predicted IoU 分开表达；底部虚线只表示可选的低分辨率 logits 反馈。
 
-它把推理主干压缩为顶部 spine，把 A2、Fermat 和频谱监督分别展开，强调三项创新及其训练/推理归属。
+预揭晓审计结果：`17/17` 个必需节点和 `18/18` 条语义关系均可从图中重建；draw.io 中共有 `102` 个可编辑对象（`80` 个顶点、`22` 条原生边）、`0` 个图片对象、`0` 个硬错误、`0` 个 warning。原生边数与语义关系数不同，是因为双向交换与复合乘积关系需要拆成多条可见连接。
 
-适合：宽幅 Overview、图形摘要、需要集中解释创新机制的场景。
+### B. 冻结后揭晓的官方图
 
-取舍：科学信息更密集，但对最终插入宽度和最小字号更敏感；若目标只是单栏图，应拆图，而不是继续缩小正文。
+![Official Segment Anything model diagram](https://raw.githubusercontent.com/facebookresearch/segment-anything/main/assets/model_diagram.png)
 
-| 对比维度 | Topology-first | Mechanism-first |
-| --- | --- | --- |
-| 第一焦点 | 端到端推理路径 | 三个创新机制 |
-| 阅读方式 | 左 → 右，再读底部训练栏 | 先读顶部主干，再读三列机制 |
-| 信息密度 | 中 | 高 |
-| 适合版位 | 常规 Figure 1、双栏宽 | 通栏 Overview、图形摘要或补充材料 |
-| 主要风险 | 机制细节被过度压缩 | 小尺寸下文字与局部箭头拥挤 |
+官方图来自 [Segment Anything 官方仓库](https://github.com/facebookresearch/segment-anything/blob/main/assets/model_diagram.png)，以远程链接原样展示，本仓库不复制该二进制资产；仓库采用 [Apache License 2.0](https://github.com/facebookresearch/segment-anything/blob/main/LICENSE)。它用真实剪刀照片和三张有效分割结果，把 image encoder、image embedding、mask prompt 的卷积注入、points/box/text prompt encoder、mask decoder 与 score 压缩成一条 `2412 × 514` 的横向叙事。
 
-这才算两个独立方向：构图骨架、视觉焦点、证据/机制权重和阅读路径都发生了变化。只更换配色、字体或圆角不算新方向。
+### 正面对比
+
+| 维度 | YOFO 盲画稿 | 官方 overview | 结论 |
+| --- | --- | --- | --- |
+| 第一任务 | 解释可提示分割器内部如何交换和生成信息 | 让读者立刻理解“图像 + 提示 → 多个有效 mask” | 两图优化的是不同沟通目标，不应以像素相似度判输赢 |
+| 抽象层级 | 展开 sparse/dense embeddings、mask/IoU tokens、two-way attention、upscale 与 hypernetwork | 只保留 image encoder、prompt encoder、mask decoder 三个主模块 | 盲画稿更适合方法架构解读；官方图更适合论文首页快速传播 |
+| 提示表达 | 跟随公开实现，画 point、box、mask，并区分稀疏与稠密路径 | points、box、text 进入 prompt encoder；mask 经 conv 后加到 image embedding | 差异来自允许证据范围，也提醒图中必须声明“论文概念范围”还是“公开代码范围” |
+| 歧义输出 | 三个候选 mask 配 predicted-IoU bars，并把质量预测与 mask 生成分开 | 三张真实分割结果分别配 score | 官方结果证据更直观；盲画稿的因果归属更明确 |
+| 反馈与交互 | 显式标出 low-resolution logits 的可选反馈，虚线避免误读为必经环 | 不画迭代反馈 | 盲画稿覆盖实现语义更多，官方图保持主叙事更干净 |
+| 视觉策略 | `1600 × 903`、双通道汇聚、矢量符号、中央 decoder 强焦点 | 超宽单链路、真实输入/输出照片、极少文字 | 官方图在“少即是多”上更强；盲画稿在层级和可教学性上更强 |
+| 可编辑性 | 文字、形状、glyph、连接线均为原生 draw.io 对象 | README 中只提供扁平 PNG | 盲画稿可以继续改标签、布局和路由；这不意味着其传播效率自动更高 |
+
+这次对比带来的工作流改进不是“以后都画成 SAM 配色”，而是三条可迁移规则：先声明证据范围；在揭晓前冻结可审计成品；揭晓后分别判断科学语义、抽象层级、真实证据、阅读效率与可编辑性。官方图可以在极简传播上胜出，独立设计也可以在机制解释上胜出，两者都应被如实保留。
 
 ## 一张 Overview 是怎么画出来的
 
-以下流程适用于 manuscript-driven Figure 1，而不只是 SBF-Mamba。
+以下流程适用于 manuscript-driven Figure 1，而不只适用于上面的示例。
 
 ### 1. 先声明事实来源
 
@@ -106,7 +116,7 @@ YOFO 在选版式之前建立四类账本：
 
 还会记录 **negative paths**：例如训练目标不得连接到推理模块、reverse branch 必须先 flip-back 再恢复空间位置。不存在的关系同样需要验证，否则一条误连线就会改变科学含义。
 
-在当前 SBF-Mamba 设计合同中，`36` 个必需节点和 `41` 条必需关系都已映射到设计对象，即 `36/36` 与 `41/41`。这只证明设计规范覆盖完整；最终图仍必须经过可见渲染和对象结构审稿，不能把覆盖率当作美观或成图通过证明。
+在上面的 Segment Anything 盲画合同中，`17` 个必需节点和 `18` 条必需关系都已映射到设计对象，即 `17/17` 与 `18/18`。这只证明设计规范覆盖完整；最终图仍必须经过可见渲染和对象结构审稿，不能把覆盖率当作美观或成图通过证明。
 
 ### 4. 从论文版位反推画布
 
@@ -180,6 +190,7 @@ YOFO 插件本身**没有打包外部向量数据库，也没有默认联网 RAG
 | 用户来源 | 稿件、公式、caption、参考图、证据素材和出版要求 | 科学事实的第一权威 |
 | 角色协议 | 六个 `SKILL.md`，定义设计、复刻、绘制、审稿和纠错职责 | 规定谁在何时做什么 |
 | 稿件到图规则 | [Manuscript-to-Figure Workflow](skills/design-scientific-figure/references/manuscript-to-figure-workflow.md) | 定义 Figure Claim、四类账本、来源绑定、盲测与最终尺寸验证 |
+| 盲画对比协议 | [Blind Figure Gym Protocol](skills/design-scientific-figure/references/blind-figure-gym.md) | 定义目标封存、预揭晓冻结、揭晓后多维比较与规则晋升边界 |
 | 出版审美规则 | [Publication Aesthetic Review](skills/audit-scientific-figure/references/publication-aesthetic-review.md) | 定义三尺度审稿、灰度层级、A/B/C 美观缺陷和最终结论 |
 | 后端能力 | draw.io、PowerPoint/WPS 在运行时返回的 capability 信息 | 决定哪些对象能原生编辑、哪些需用可编辑组合对象 |
 
@@ -380,6 +391,7 @@ node scripts/officejs-setup.mjs sideload
 ├── .agents/plugins/marketplace.json # Git marketplace 清单
 ├── .mcp.json                        # 本地 MCP 服务入口
 ├── assets/examples/                 # README 实际渲染案例
+├── examples/segment-anything-blind/ # 盲画合同、设计规范与揭晓后对比
 ├── skills/                          # Designer / Drawer / Reviewer / Corrector
 ├── scripts/                         # draw.io、PowerPoint、WPS、Office.js 桥接
 ├── officejs/                        # PowerPoint Office.js 任务窗格
