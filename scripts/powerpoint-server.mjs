@@ -763,7 +763,7 @@ async function ooxmlPythonExecutable() {
       failures.push(`${candidate.executable}${candidate.args.length ? ` ${candidate.args.join(" ")}` : ""}: ${String(error.message || error).split("\n")[0]}`);
     }
   }
-  throw new Error(`The PowerPoint/WPS OOXML backend requires Python with python-pptx. Run install.sh on macOS/Linux or set YOU_ONLY_FIGURE_ONCE_PYTHON. Checked: ${failures.join("; ")}`);
+  throw new Error(`The PowerPoint/WPS OOXML backend requires Python with python-pptx. Install it with python -m pip install python-pptx or set YOU_ONLY_FIGURE_ONCE_PYTHON. Checked: ${failures.join("; ")}`);
 }
 
 async function runOoxmlBridge(action, args = {}) {

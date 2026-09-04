@@ -1,0 +1,21 @@
+{
+  "name": "you-only-figure-once",
+  "interface": {
+    "displayName": "You-Only-Figure-Once"
+  },
+  "plugins": [
+    {
+      "name": "you-only-figure-once",
+      "source": {
+        "source": "url",
+        "url": "https://github.com/exsinger-hub/You-Only-Figure-Once.git",
+        "ref": "main"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}
