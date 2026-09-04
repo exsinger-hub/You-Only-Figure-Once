@@ -606,7 +606,7 @@ function inspectXml(xml) {
         errors.push(`Vertex '${cell.id}' embeds an inline HTML/SVG image. Use a separate audited image cell so the source, reason, and crop can be inspected.`);
       }
       if (cell.vertex && styleUsesImage(decodeXml(cell.style))) {
-        if (cell.rasterReason.trim().length < 8) errors.push(`Image vertex '${cell.id}' is missing a specific scientificIllustratorRasterReason audit.`);
+        if (cell.rasterReason.trim().length < 8) errors.push(`Image vertex '${cell.id}' is missing a specific raster-reason audit.`);
         if (cell.rasterRole === "reference-overlay") {
           warnings.push(`Image vertex '${cell.id}' is a reference-only tracing overlay and must not remain in the final deliverable.`);
         } else {
@@ -614,14 +614,14 @@ function inspectXml(xml) {
           const cropValid = values.every((value) => Number.isFinite(value) && value >= 0 && value <= 99)
             && cell.crop.left + cell.crop.right < 100
             && cell.crop.top + cell.crop.bottom < 100;
-          if (!cropValid) errors.push(`Image vertex '${cell.id}' has invalid scientific illustrator crop metadata.`);
+          if (!cropValid) errors.push(`Image vertex '${cell.id}' has invalid You-Only-Figure-Once crop metadata.`);
           const hasCrop = values.some((value) => value > 0);
           if (cell.sourceTightlyCropped !== "true" && !hasCrop) {
             errors.push(`Image vertex '${cell.id}' must certify a tightly cropped source or record nonzero crop percentages.`);
           }
-          if (cell.atomicRasterUnit !== "true") errors.push(`Image vertex '${cell.id}' must certify scientificIllustratorAtomicRasterUnit=true.`);
-          if (cell.containsReconstructableContent !== "false") errors.push(`Image vertex '${cell.id}' must certify scientificIllustratorContainsReconstructableContent=false.`);
-          if (cell.decompositionNote.trim().length < 8) errors.push(`Image vertex '${cell.id}' is missing a useful scientificIllustratorDecompositionNote.`);
+          if (cell.atomicRasterUnit !== "true") errors.push(`Image vertex '${cell.id}' must certify atomic-raster-unit=true.`);
+          if (cell.containsReconstructableContent !== "false") errors.push(`Image vertex '${cell.id}' must certify contains-reconstructable-content=false.`);
+          if (cell.decompositionNote.trim().length < 8) errors.push(`Image vertex '${cell.id}' is missing a useful decomposition note.`);
           const compositeText = `${cell.id} ${cell.rasterReason} ${cell.decompositionNote}`;
           if (/(grid|montage|panel|comparison|stack|matrix|multi[- ]?image|multiple images|rows? of|columns? of)/i.test(compositeText)) {
             errors.push(`Image vertex '${cell.id}' appears to describe a composite raster. Split independent visual fields and rebuild headings, frames, grids, legends, arrows, and axes as editable cells.`);

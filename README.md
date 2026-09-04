@@ -6,7 +6,7 @@
 
 维护者：**gatina**
 
-[盲画对比](#案例盲画后再揭晓对比) · [如何画 Overview](#一张-overview-是怎么画出来的) · [知识库](#知识库用了什么) · [质量判断](#怎么判断效果是否好) · [安装](#安装) · [使用](#五分钟上手)
+[手绘 LLM 实操](#案例近期-llm-手绘语言但不复制任何原图) · [盲画对比](#案例盲画后再揭晓对比) · [如何画 Overview](#一张-overview-是怎么画出来的) · [知识库](#知识库用了什么) · [质量判断](#怎么判断效果是否好) · [安装](#安装) · [使用](#五分钟上手)
 
 ![Blindly designed Segment Anything overview](assets/examples/segment-anything-blind-overview.png)
 
@@ -40,6 +40,42 @@ flowchart LR
 | Drawer | 在 PowerPoint、WPS 或 draw.io 中按区域创建文字、形状、线、表格、图表和原子图片 | 可编辑 `.pptx` 或 `.drawio` |
 | Reviewer | 同时检查对象结构和最新渲染，不把工具调用成功当成图形正确 | 审稿记录、通过/失败结论 |
 | Corrector | 将缺陷翻译成按对象、按顺序、可回归验证的修正 | 最小修改计划 |
+
+## 案例：近期 LLM 手绘语言，但不复制任何原图
+
+下面这张图不是拿某篇文章已有的 overview 临摹。YOFO 只从近期 LLM 手绘内容中提取**视觉语言**，再从独立的科学合同重新设计节点、关系和构图：
+
+![YOFO hand-drawn LLM agent overview](assets/examples/llm-agent-handdrawn-overview.png)
+
+可直接检查：[可编辑 PowerPoint](assets/examples/llm-agent-handdrawn-overview.pptx) · [source contract](examples/llm-agent-handdrawn/source-contract.md) · [design spec](examples/llm-agent-handdrawn/design-spec.md) · [fresh audit](examples/llm-agent-handdrawn/audit-report.md)
+
+### 参考了什么，没有参考什么
+
+| 风格来源 | 只迁移的视觉特征 | 明确禁止迁移 |
+| --- | --- | --- |
+| [Vicky：LLM hand-drawn explainer（2026）](https://medium.com/@vicky01010110/not-a-lecture-from-the-man-on-the-hill-61bcb6c4c66b) | 单色技术涂鸦、短手写标签、留白 | 原图布局、节点和措辞 |
+| [Karina Lewis：Context Windows sketchnotes（2025）](https://medium.com/@karinasketchesthings/context-windows-5-perspectives-on-gen-ai-c9dddb9fe45e) | 克制高亮、区域节奏、人的笔记感 | 五主题结构和隐喻 |
+| [Maarten Grootendorst：A Visual Guide to LLM Agents（2025）](https://newsletter.maartengrootendorst.com/p/a-visual-guide-to-llm-agents) | 模块化视觉语法、清楚分块 | 具体 diagram、icon 和构图 |
+| [Henrik Kniberg：Generative AI in a Nutshell（2024）](https://www.youtube.com/watch?v=2IK3DFHRFfw) | 选择性荧光笔和紧凑 doodle | 海报密度与原作者绘画 |
+
+这条 **style-source firewall** 很关键：参考图只能回答“线条和气质可以怎样表达”，不能替代“系统实际上有哪些节点和关系”。本例的内容合同单独冻结为 11 个节点、12 条关系和 5 条 negative paths。
+
+### 对抗性设计：故意尝试把图读错
+
+| 容易出现的漂亮但错误的画法 | 本图的处理 |
+| --- | --- |
+| 把手绘理解成箭头端点随机抖动 | 只有标题、标签、人物和强调线允许轻微偏移；语义连接线全部保持精确 |
+| 看起来像 LLM 自己调用外部 API | 在 proposal 与 tool 之间显式加入 `AGENT CONTROLLER` |
+| 让循环暗示每次都必须调用工具 | 工具路径使用虚线并标注 `optional tool-use loop` |
+| 让 observation 回流看起来像训练模型 | 回流文字明确写 `model weights stay frozen` |
+| 让 next-token prediction 看起来等于事实验证 | 核心区写明 `prediction ≠ verification`，答案侧保留 S1–S3 来源 ID |
+| 只换手写字体，骨架仍是普通流程图 | 使用原生人物、文档叠片、highlighter、次轮廓和非对称主脊柱形成完整风格语法 |
+
+### Microsoft PowerPoint 实操结果
+
+这不是概念稿，而是在隔离的新演示文稿中通过 Windows PowerPoint COM 实际绘制并由 PowerPoint 重新导出的结果。最终页包含 `99` 个原生可编辑对象、`0` 个图片对象；`11/11` 个必需节点和 `12/12` 条关系可以从成图重建；整页结构审计为 `0` 个硬错误、`0` 个 warning，520 px 缩略图与灰度层级也通过。
+
+实操还暴露了一个后端真问题：部分 Windows 环境中 PowerPoint COM 可用，但 Office Interop 枚举程序集不可加载，导致 `rectangle` 这样的友好形状名失效。桥接层现已加入一组稳定的原生 AutoShape 回退值，烟雾测试也改为直接用友好名称，防止以后只测试数字 ID 而漏掉回归。
 
 ## 案例：盲画后再揭晓对比
 
@@ -192,6 +228,7 @@ YOFO 插件本身**没有打包外部向量数据库，也没有默认联网 RAG
 | 稿件到图规则 | [Manuscript-to-Figure Workflow](skills/design-scientific-figure/references/manuscript-to-figure-workflow.md) | 定义 Figure Claim、四类账本、来源绑定、盲测与最终尺寸验证 |
 | 盲画对比协议 | [Blind Figure Gym Protocol](skills/design-scientific-figure/references/blind-figure-gym.md) | 定义目标封存、预揭晓冻结、揭晓后多维比较与规则晋升边界 |
 | 出版审美规则 | [Publication Aesthetic Review](skills/audit-scientific-figure/references/publication-aesthetic-review.md) | 定义三尺度审稿、灰度层级、A/B/C 美观缺陷和最终结论 |
+| 手绘技术风格 | [Hand-drawn Technical Style](skills/design-scientific-figure/references/hand-drawn-technical-style.md) | 定义三种手绘风格族、精确/表现双层、风格来源防火墙与对抗性退回条件 |
 | 后端能力 | draw.io、PowerPoint/WPS 在运行时返回的 capability 信息 | 决定哪些对象能原生编辑、哪些需用可编辑组合对象 |
 
 六个可调用 skill 为：
@@ -349,6 +386,20 @@ codex plugin add you-only-figure-once@you-only-figure-once
 逐面板绘制、审阅和修正，不要把整张图作为背景描摹。
 ```
 
+### 画一张手绘 LLM Overview
+
+```text
+使用 $design-scientific-figure 和 $edit-powerpoint-live，设计一张手绘技术风格的 LLM agent overview。
+
+不要复制任何参考图的布局或语义。先冻结 Figure Claim、required nodes/edges、
+negative paths 和 style-source firewall；采用 restrained_technical_handdrawn，
+明确哪些对象允许轻微偏移，哪些连接必须精确。
+
+在 Microsoft PowerPoint 的隔离新文件中实画，所有可重建内容保留为原生对象。
+逐区域导出、审稿和修正；最终交付 PPTX、PowerPoint 渲染 PNG、对象审计、
+520 px 缩略图与灰度判断。分别报告科学正确性和手绘风格忠实度。
+```
+
 ### 只审阅当前 PowerPoint
 
 ```text
@@ -391,6 +442,7 @@ node scripts/officejs-setup.mjs sideload
 ├── .agents/plugins/marketplace.json # Git marketplace 清单
 ├── .mcp.json                        # 本地 MCP 服务入口
 ├── assets/examples/                 # README 实际渲染案例
+├── examples/llm-agent-handdrawn/    # 手绘 LLM 合同、设计规范与实操审计
 ├── examples/segment-anything-blind/ # 盲画合同、设计规范与揭晓后对比
 ├── skills/                          # Designer / Drawer / Reviewer / Corrector
 ├── scripts/                         # draw.io、PowerPoint、WPS、Office.js 桥接

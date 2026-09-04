@@ -55,6 +55,8 @@ Prefer one clear reading path: left-to-right, top-to-bottom, or an explicitly la
 
 For a publication-facing figure, graphical abstract, style comparison, or any request involving aesthetics, visual quality, or beautification, read [Publication Aesthetic Review](../audit-scientific-figure/references/publication-aesthetic-review.md) completely before freezing the `design_spec`.
 
+When the requested direction is hand-drawn, sketchnote, pencil, doodle, whiteboard, or Excalidraw-like, also read [Hand-drawn Technical Style](references/hand-drawn-technical-style.md) completely. Declare its `style_family`, `imperfection_budget`, typography split, and backend-native drawing strategy in the `design_spec`. For a paper overview, default to restrained technical hand-drawing unless the communication purpose and final display size genuinely support a denser sketchnote or pencil treatment.
+
 For each direction, define a `style_dna` that changes drawing decisions, not just surface decoration:
 
 - composition skeleton and reading path;
@@ -95,6 +97,7 @@ Return a `design_spec` containing:
 - raster decomposition declarations;
 - artifact mode (`direction_review` or `publication`), final display size, and figure archetype;
 - `style_dna`, focal hierarchy, evidence weighting, and forbidden motifs;
+- for a hand-drawn direction, its style family, controlled-imperfection budget, exact-versus-expressive line split, typography split, native doodle inventory, and style-source firewall;
 - usable canvas bounds, meaningful-content hull, intended canvas-utilization range, and the function of each planned large whitespace region;
 - an evidence budget for overview figures that states the placement and relative visual mass of representative real results, or the scientific reason no real evidence is available;
 - for manuscript-derived work, source locations, Figure Claim, Paper Figure Signature, complete node/edge/operand/evidence ledgers, publication display width, permitted omissions, and any blind-exclusion receipt;

@@ -9,6 +9,8 @@ Act as the Corrector. Diagnose each Reviewer finding and produce an executable c
 
 When the Reviewer supplies an A/B/C publication-aesthetic finding, read [Publication Aesthetic Review](../audit-scientific-figure/references/publication-aesthetic-review.md) completely before producing corrections.
 
+When a finding concerns hand-drawn fidelity, fake sketch effects, handwriting legibility, doodle competition, highlighter use, double outlines, or rough connector geometry, also read [Hand-drawn Technical Style](../design-scientific-figure/references/hand-drawn-technical-style.md) completely. Correct the smallest style layer that caused the defect. Preserve exact semantic connectors and already approved geometry; never answer weak hand-drawn fidelity by adding global random jitter or raster texture.
+
 When a finding concerns manuscript fidelity, equation operands, evidence scope, training/inference boundaries, or visible-edge reconstruction, read [Manuscript-to-Figure Workflow](../design-scientific-figure/references/manuscript-to-figure-workflow.md) completely before producing corrections.
 
 ## Required inputs

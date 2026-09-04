@@ -25,6 +25,8 @@ Review the figure at thumbnail scale for silhouette and focal hierarchy, fit-to-
 
 For the final whole-figure publication gate, use an independent fresh-eye Reviewer when available. Give it the semantic contract, selected reference and Style DNA, but do not provide the Drawer's defense of the current composition or a list of suspected defects.
 
+When the declared style is hand-drawn, sketchnote, pencil, doodle, whiteboard, or Excalidraw-like, also read [Hand-drawn Technical Style](../design-scientific-figure/references/hand-drawn-technical-style.md) completely. Review scientific clarity and hand-drawn fidelity as separate questions. A clean diagram can pass semantics yet miss the requested style; a visibly rough diagram fails when its jitter, texture, font, or doodles reduce publication-width legibility or make topology ambiguous. Do not reward noise as authenticity.
+
 ## Review taxonomy
 
 Review every region and the whole figure for:

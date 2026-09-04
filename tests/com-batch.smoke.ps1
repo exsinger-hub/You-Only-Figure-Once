@@ -53,7 +53,9 @@ try {
 
     $operations = [Collections.Generic.List[object]]::new()
     $operations.Add(@{ type = "add_slide"; position = 1; layout = "blank"; name = "Smoke Slide" })
-    $operations.Add(@{ type = "add_shape"; slide_index = 1; name = "smoke_box"; shape_type_id = 1; left = 72; top = 72; width = 144; height = 72; fill_color = "#DCEAF7"; line_color = "#355C7D" })
+    # Use a friendly shape name here so the smoke test covers resolution on
+    # machines where PowerPoint COM works but Office interop enums are absent.
+    $operations.Add(@{ type = "add_shape"; slide_index = 1; name = "smoke_box"; shape = "rectangle"; left = 72; top = 72; width = 144; height = 72; fill_color = "#DCEAF7"; line_color = "#355C7D" })
     $operations.Add(@{ type = "add_textbox"; slide_index = 1; name = "smoke_label"; left = 84; top = 92; width = 120; height = 30; text = "Background batch"; font_size = 16; font_color = "#16324F" })
     $operations.Add(@{ type = "update_shape"; slide_index = 1; shape_name = "smoke_box"; left = 76 })
     for ($index = 0; $index -lt $ExtraShapeCount; $index += 1) {

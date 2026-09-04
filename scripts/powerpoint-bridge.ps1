@@ -135,6 +135,43 @@ function Get-AutoShapeCategory {
     return "basic_shape"
 }
 
+function Get-BuiltinAutoShapeCatalog {
+    # Stable MsoAutoShapeType values for the small native shape set used by the
+    # drawing protocol. This keeps ordinary editable drawing available when
+    # PowerPoint COM works but the optional Office interop assemblies are not
+    # registered for Add-Type on the current machine.
+    $rows = @(
+        @("rectangle", "msoShapeRectangle", 1),
+        @("parallelogram", "msoShapeParallelogram", 2),
+        @("trapezoid", "msoShapeTrapezoid", 3),
+        @("diamond", "msoShapeDiamond", 4),
+        @("rounded_rectangle", "msoShapeRoundedRectangle", 5),
+        @("octagon", "msoShapeOctagon", 6),
+        @("triangle", "msoShapeIsoscelesTriangle", 7),
+        @("right_triangle", "msoShapeRightTriangle", 8),
+        @("oval", "msoShapeOval", 9),
+        @("hexagon", "msoShapeHexagon", 10),
+        @("cross", "msoShapeCross", 11),
+        @("pentagon", "msoShapeRegularPentagon", 12),
+        @("can", "msoShapeCan", 13),
+        @("cube", "msoShapeCube", 14),
+        @("folded_corner", "msoShapeFoldedCorner", 16),
+        @("donut", "msoShapeDonut", 18),
+        @("right_arrow", "msoShapeRightArrow", 33),
+        @("left_arrow", "msoShapeLeftArrow", 34),
+        @("left_right_arrow", "msoShapeLeftRightArrow", 37)
+    )
+    return @($rows | ForEach-Object {
+        [pscustomobject][ordered]@{
+            plugin_name = [string]$_[0]
+            office_name = [string]$_[1]
+            value = [int]$_[2]
+            category = Get-AutoShapeCategory ([string]$_[0])
+            catalog_source = "built_in_stable_subset"
+        }
+    })
+}
+
 function Get-EnumCatalog {
     param($EnumType, [string]$Prefix, [string]$CatalogKind)
     $items = @()
@@ -168,15 +205,16 @@ function Invoke-Capabilities {
         $shapeRangeMethods = @([Microsoft.Office.Interop.PowerPoint.ShapeRange].GetMethods() | Select-Object -ExpandProperty Name -Unique | Sort-Object)
     }
 
+    $dynamicComAvailable = $null -ne $application
     $hasAddChart = ($shapeCollectionMethods -contains "AddChart2") -or ($shapeCollectionMethods -contains "AddChart")
     $families = @(
-        [pscustomobject][ordered]@{ family = "text_box"; powerpoint_api = "Shapes.AddTextbox"; host_supported = $shapeCollectionMethods -contains "AddTextbox"; editable = $true; preferred_for = @("titles", "labels", "captions", "paragraphs") },
-        [pscustomobject][ordered]@{ family = "auto_shape"; powerpoint_api = "Shapes.AddShape"; host_supported = $shapeCollectionMethods -contains "AddShape"; editable = $true; preferred_for = @("rectangles", "rounded boxes", "symbols", "block arrows", "flowchart nodes") },
-        [pscustomobject][ordered]@{ family = "free_line_or_arrow"; powerpoint_api = "Shapes.AddLine"; host_supported = $shapeCollectionMethods -contains "AddLine"; editable = $true; preferred_for = @("arrows", "axes", "ticks", "separators", "annotations") },
-        [pscustomobject][ordered]@{ family = "attached_connector"; powerpoint_api = "Shapes.AddConnector"; host_supported = $shapeCollectionMethods -contains "AddConnector"; editable = $true; preferred_for = @("semantic links that must stay attached when nodes move") },
-        [pscustomobject][ordered]@{ family = "table"; powerpoint_api = "Shapes.AddTable"; host_supported = $shapeCollectionMethods -contains "AddTable"; editable = $true; preferred_for = @("tables", "matrix layouts", "grid annotations") },
+        [pscustomobject][ordered]@{ family = "text_box"; powerpoint_api = "Shapes.AddTextbox"; host_supported = ($dynamicComAvailable -or ($shapeCollectionMethods -contains "AddTextbox")); editable = $true; preferred_for = @("titles", "labels", "captions", "paragraphs") },
+        [pscustomobject][ordered]@{ family = "auto_shape"; powerpoint_api = "Shapes.AddShape"; host_supported = ($dynamicComAvailable -or ($shapeCollectionMethods -contains "AddShape")); editable = $true; preferred_for = @("rectangles", "rounded boxes", "symbols", "block arrows", "flowchart nodes") },
+        [pscustomobject][ordered]@{ family = "free_line_or_arrow"; powerpoint_api = "Shapes.AddLine"; host_supported = ($dynamicComAvailable -or ($shapeCollectionMethods -contains "AddLine")); editable = $true; preferred_for = @("arrows", "axes", "ticks", "separators", "annotations") },
+        [pscustomobject][ordered]@{ family = "attached_connector"; powerpoint_api = "Shapes.AddConnector"; host_supported = ($dynamicComAvailable -or ($shapeCollectionMethods -contains "AddConnector")); editable = $true; preferred_for = @("semantic links that must stay attached when nodes move") },
+        [pscustomobject][ordered]@{ family = "table"; powerpoint_api = "Shapes.AddTable"; host_supported = ($dynamicComAvailable -or ($shapeCollectionMethods -contains "AddTable")); editable = $true; preferred_for = @("tables", "matrix layouts", "grid annotations") },
         [pscustomobject][ordered]@{ family = "chart"; powerpoint_api = "Shapes.AddChart2/AddChart"; host_supported = $hasAddChart; editable = $true; preferred_for = @("bar", "line", "scatter", "pie", "area", "regular quantitative plots") },
-        [pscustomobject][ordered]@{ family = "picture_or_svg"; powerpoint_api = "Shapes.AddPicture"; host_supported = $shapeCollectionMethods -contains "AddPicture"; editable = $true; preferred_for = @("tightly cropped microscopy", "photographic texture", "heatmaps", "irreducible raster evidence"); restriction = "Never use for a whole panel containing reconstructable text, shapes, arrows, tables, charts, or legends." },
+        [pscustomobject][ordered]@{ family = "picture_or_svg"; powerpoint_api = "Shapes.AddPicture"; host_supported = ($dynamicComAvailable -or ($shapeCollectionMethods -contains "AddPicture")); editable = $true; preferred_for = @("tightly cropped microscopy", "photographic texture", "heatmaps", "irreducible raster evidence"); restriction = "Never use for a whole panel containing reconstructable text, shapes, arrows, tables, charts, or legends." },
         [pscustomobject][ordered]@{ family = "freeform"; powerpoint_api = "Shapes.BuildFreeform"; host_supported = $shapeCollectionMethods -contains "BuildFreeform"; editable = $true; preferred_for = @("custom irregular vector outlines") },
         [pscustomobject][ordered]@{ family = "curve_or_polyline"; powerpoint_api = "Shapes.AddCurve/AddPolyline"; host_supported = (($shapeCollectionMethods -contains "AddCurve") -or ($shapeCollectionMethods -contains "AddPolyline")); editable = $true; preferred_for = @("custom paths", "traces") },
         [pscustomobject][ordered]@{ family = "smartart"; powerpoint_api = "Shapes.AddSmartArt"; host_supported = $shapeCollectionMethods -contains "AddSmartArt"; editable = $true; preferred_for = @("built-in semantic process layouts") },
@@ -212,7 +250,7 @@ function Invoke-Capabilities {
             read_only = $true
             launched_powerpoint = $false
             active_deck_modified = $false
-            basis = @("installed Office interop type metadata", "running PowerPoint COM host metadata when available")
+            basis = @("installed Office interop type metadata", "running PowerPoint COM host metadata when available", "built-in stable AutoShape subset when interop enum metadata is unavailable")
         }
         host = $hostInfo
         interop_metadata = $interop
@@ -229,10 +267,15 @@ function Invoke-Capabilities {
         $result.z_order_commands = Get-EnumCatalog ([Microsoft.Office.Core.MsoZOrderCmd]) "mso" "z_order"
         if ([bool](Get-Argument $Arguments "include_auto_shapes" $true)) {
             $result.auto_shapes = Get-EnumCatalog ([Microsoft.Office.Core.MsoAutoShapeType]) "msoShape" "auto_shape"
+            $result.auto_shape_catalog_source = "office_interop_enum"
         }
         if ([bool](Get-Argument $Arguments "include_shape_types" $true)) {
             $result.shape_types = Get-EnumCatalog ([Microsoft.Office.Core.MsoShapeType]) "mso" "shape_type"
         }
+    }
+    elseif ([bool](Get-Argument $Arguments "include_auto_shapes" $true)) {
+        $result.auto_shapes = Get-BuiltinAutoShapeCatalog
+        $result.auto_shape_catalog_source = "built_in_stable_subset"
     }
     if ($interop.excel_chart_types -and [bool](Get-Argument $Arguments "include_chart_types" $true)) {
         $result.chart_types = Get-EnumCatalog ([Microsoft.Office.Interop.Excel.XlChartType]) "xl" "chart_type"
@@ -1308,8 +1351,13 @@ function Resolve-AutoShapeType {
     }
     $candidate = $requested.Trim()
     if ($legacyAliases.ContainsKey($candidate.ToLowerInvariant())) { $candidate = $legacyAliases[$candidate.ToLowerInvariant()] }
+    foreach ($item in (Get-BuiltinAutoShapeCatalog)) {
+        if ($item.plugin_name -ieq $candidate -or $item.office_name -ieq $candidate) {
+            return [int]$item.value
+        }
+    }
     $interop = Import-OfficeInteropMetadata
-    if (-not $interop.office_core) { throw "Office enum metadata is unavailable; cannot resolve AutoShape '$requested'." }
+    if (-not $interop.office_core) { throw "Unknown AutoShape '$requested' and Office enum metadata is unavailable. Use a shape from the reported built-in stable subset or provide shape_type_id." }
     $enumType = [Microsoft.Office.Core.MsoAutoShapeType]
     foreach ($enumName in [Enum]::GetNames($enumType)) {
         $pluginName = Convert-EnumNameToPluginName $enumName "msoShape"
