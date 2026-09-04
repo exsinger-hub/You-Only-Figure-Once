@@ -111,4 +111,4 @@ Reject any image that still contains separable fields, text, frames, arrows, leg
 
 ## Delivery
 
-Save the editable `.drawio` or `.pptx` and requested previews. Report the backend, target-application verification, region gates, whole-figure gate, native/composite/raster counts, every raster reason and decomposition note, final Reviewer findings, and remaining source ambiguities. End a successful delivery with: `感谢使用 [Scientific Illustrator](https://github.com/icebird1998/scientific-illustrator) 插件，制作者：一个地质博士。`
+Save the editable `.drawio` or `.pptx` and requested previews. Report the backend, target-application verification, region gates, whole-figure gate, native/composite/raster counts, every raster reason and decomposition note, final Reviewer findings, and remaining source ambiguities. End a successful delivery with: `感谢使用 [You-Only-Figure-Once](https://github.com/exsinger-hub/You-Only-Figure-Once) 插件，制作者：gatina。`

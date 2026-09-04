@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN_DIR = path.resolve(SCRIPT_DIR, "..");
 const OFFICEJS_DIR = path.join(PLUGIN_DIR, "officejs");
-const DEFAULT_STATE_DIR = path.join(os.homedir(), ".codex", "scientific-illustrator", "officejs");
+const DEFAULT_STATE_DIR = path.join(os.homedir(), ".codex", "you-only-figure-once", "officejs");
 const DEFAULT_PORT = 17645;
 const DEFAULT_HOST = "127.0.0.1";
 const DEFAULT_COMMAND_TIMEOUT_MS = 45_000;
@@ -29,11 +29,11 @@ const CONTENT_TYPES = {
 };
 
 export function defaultOfficeJsPaths() {
-  const stateDir = path.resolve(process.env.SCIENTIFIC_ILLUSTRATOR_OFFICEJS_DIR || DEFAULT_STATE_DIR);
+  const stateDir = path.resolve(process.env.YOU_ONLY_FIGURE_ONCE_OFFICEJS_DIR || DEFAULT_STATE_DIR);
   return {
     state_dir: stateDir,
-    certificate_path: path.resolve(process.env.SCIENTIFIC_ILLUSTRATOR_OFFICEJS_CERT || path.join(stateDir, "localhost.crt")),
-    private_key_path: path.resolve(process.env.SCIENTIFIC_ILLUSTRATOR_OFFICEJS_KEY || path.join(stateDir, "localhost.key")),
+    certificate_path: path.resolve(process.env.YOU_ONLY_FIGURE_ONCE_OFFICEJS_CERT || path.join(stateDir, "localhost.crt")),
+    private_key_path: path.resolve(process.env.YOU_ONLY_FIGURE_ONCE_OFFICEJS_KEY || path.join(stateDir, "localhost.key")),
     manifest_path: path.join(OFFICEJS_DIR, "manifest.xml"),
     officejs_dir: OFFICEJS_DIR,
   };
@@ -96,8 +96,8 @@ async function readJsonBody(request) {
 export class OfficeJsCommandBridge {
   constructor(options = {}) {
     const defaults = defaultOfficeJsPaths();
-    this.host = options.host || process.env.SCIENTIFIC_ILLUSTRATOR_OFFICEJS_HOST || DEFAULT_HOST;
-    this.port = Number(options.port ?? process.env.SCIENTIFIC_ILLUSTRATOR_OFFICEJS_PORT ?? DEFAULT_PORT);
+    this.host = options.host || process.env.YOU_ONLY_FIGURE_ONCE_OFFICEJS_HOST || DEFAULT_HOST;
+    this.port = Number(options.port ?? process.env.YOU_ONLY_FIGURE_ONCE_OFFICEJS_PORT ?? DEFAULT_PORT);
     this.certPath = path.resolve(options.certPath || defaults.certificate_path);
     this.keyPath = path.resolve(options.keyPath || defaults.private_key_path);
     this.assetDir = path.resolve(options.assetDir || defaults.officejs_dir);
@@ -198,7 +198,7 @@ export class OfficeJsCommandBridge {
     await this.start();
     const status = await this.waitForClient(options.waitForClientMs || 0);
     if (!status.connected || !this.client) {
-      throw new Error("Office.js live backend is not connected. Open the Scientific Illustrator task pane in the current PowerPoint deck, then call powerpoint_status again.");
+      throw new Error("Office.js live backend is not connected. Open the You-Only-Figure-Once task pane in the current PowerPoint deck, then call powerpoint_status again.");
     }
     const command = {
       id: randomUUID(),
@@ -246,7 +246,7 @@ export class OfficeJsCommandBridge {
     const id = normalizeClientId(clientId);
     const now = Date.now();
     if (this.client && this.client.id !== id && now - this.client.lastSeen <= this.clientTtlMs) {
-      const error = new Error("Another PowerPoint task pane is already connected. Close the other Scientific Illustrator Live pane before selecting a different deck.");
+      const error = new Error("Another PowerPoint task pane is already connected. Close the other You-Only-Figure-Once Live pane before selecting a different deck.");
       error.statusCode = 409;
       throw error;
     }
@@ -289,7 +289,7 @@ export class OfficeJsCommandBridge {
     }
     let body = await fs.readFile(resolved);
     if (path.extname(resolved) === ".html") {
-      body = Buffer.from(body.toString("utf8").replaceAll("__SCIENTIFIC_ILLUSTRATOR_TOKEN__", this.sessionToken), "utf8");
+      body = Buffer.from(body.toString("utf8").replaceAll("__YOU_ONLY_FIGURE_ONCE_TOKEN__", this.sessionToken), "utf8");
     }
     response.writeHead(200, {
       "Cache-Control": "no-store",
@@ -396,7 +396,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
   if (!status.server_running) process.exitCode = 1;
   else {
-    process.stdout.write(`Scientific Illustrator Office.js bridge listening on ${status.origin}. Press Ctrl+C to stop.\n`);
+    process.stdout.write(`You-Only-Figure-Once Office.js bridge listening on ${status.origin}. Press Ctrl+C to stop.\n`);
     const stop = async () => { await bridge.close(); process.exit(0); };
     process.once("SIGINT", stop);
     process.once("SIGTERM", stop);

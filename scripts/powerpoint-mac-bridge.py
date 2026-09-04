@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cross-platform file-backed PPTX bridge for Scientific Illustrator.
+"""Cross-platform file-backed PPTX bridge for You-Only-Figure-Once.
 
 The preferred Windows Microsoft PowerPoint backend edits the live COM model.
 This bridge covers Microsoft PowerPoint for Mac and WPS Presentation on Windows
@@ -41,9 +41,9 @@ from pptx.util import Pt
 
 
 STATE_DIR = Path(
-    os.environ.get("SCIENTIFIC_ILLUSTRATOR_STATE_DIR")
-    or os.environ.get("SCIENTIFIC_ILLUSTRATOR_MAC_DIR")  # Backward compatibility with <= 1.5.2.
-    or str(Path.home() / ".codex" / "scientific-illustrator" / "presentations")
+    os.environ.get("YOU_ONLY_FIGURE_ONCE_STATE_DIR")
+    or os.environ.get("YOU_ONLY_FIGURE_ONCE_MAC_DIR")  # Backward compatibility with <= 1.5.2.
+    or str(Path.home() / ".codex" / "you-only-figure-once" / "presentations")
 ).expanduser()
 STATE_PATH = STATE_DIR / "session.json"
 MAC_HOSTS = {
@@ -71,7 +71,7 @@ MAC_HOST_ENV = {
 
 def _requested_host(args: dict | None = None, state: dict | None = None) -> str:
     explicit = (args or {}).get("host_application")
-    configured = os.environ.get("SCIENTIFIC_ILLUSTRATOR_PPT_HOST", "auto")
+    configured = os.environ.get("YOU_ONLY_FIGURE_ONCE_PPT_HOST", "auto")
     saved = (state or {}).get("host_application")
     value = str(explicit or saved or configured or "auto").strip().lower()
     if value not in {"auto", "powerpoint", "wps"}:
@@ -266,7 +266,7 @@ def _osascript(source: str, *arguments: str, check: bool = False) -> str:
 
 
 def _focus_policy() -> str:
-    value = os.environ.get("SCIENTIFIC_ILLUSTRATOR_FOCUS_POLICY", "preserve").strip().lower()
+    value = os.environ.get("YOU_ONLY_FIGURE_ONCE_FOCUS_POLICY", "preserve").strip().lower()
     return value if value in {"preserve", "foreground"} else "preserve"
 
 
@@ -300,7 +300,9 @@ def _open_windows_presentation(file_path: Path, executable: str | None, focus_po
         method = "shell-execute-no-activate"
     if previous_foreground:
         time.sleep(0.15)
-        user32.SetForegroundWindow(previous_foreground)
+        current_foreground = user32.GetForegroundWindow()
+        if current_foreground != previous_foreground:
+            user32.SetForegroundWindow(previous_foreground)
     return {"open_dispatched": True, "dispatch_method": method, "dispatch_return_code": None}
 
 
@@ -400,7 +402,7 @@ def _document_open_verification(file_path: Path, process_ids: list[int], host_na
 def _wait_for_document_open(file_path: Path, host_name: str, host: dict) -> bool | None:
     if sys.platform != "darwin":
         return None
-    timeout_ms = max(0, min(30000, int(os.environ.get("SCIENTIFIC_ILLUSTRATOR_OPEN_VERIFY_TIMEOUT_MS", "5000"))))
+    timeout_ms = max(0, min(30000, int(os.environ.get("YOU_ONLY_FIGURE_ONCE_OPEN_VERIFY_TIMEOUT_MS", "5000"))))
     deadline = time.monotonic() + timeout_ms / 1000
     while True:
         verified = _document_open_verification(file_path, _main_process_ids(host_name, host), host_name)
@@ -481,7 +483,7 @@ def _refresh_presentation(file_path: Path, state: dict | None = None, *, focus_p
         "microsoft_powerpoint_used": host_name == "powerpoint",
         "file_path": str(file_path),
         "focus_policy": focus_policy,
-        "sync_enabled": os.environ.get("SCIENTIFIC_ILLUSTRATOR_POWERPOINT_SYNC", "1") != "0",
+        "sync_enabled": os.environ.get("YOU_ONLY_FIGURE_ONCE_POWERPOINT_SYNC", "1") != "0",
         "open_dispatched": False,
         "dispatch_method": None,
         "dispatch_return_code": None,
@@ -489,8 +491,8 @@ def _refresh_presentation(file_path: Path, state: dict | None = None, *, focus_p
         "document_open_verified": None,
         "refresh_verified": None,
     }
-    if os.environ.get("SCIENTIFIC_ILLUSTRATOR_POWERPOINT_SYNC", "1") == "0":
-        result["dispatch_error"] = "Application synchronization is disabled by SCIENTIFIC_ILLUSTRATOR_POWERPOINT_SYNC=0."
+    if os.environ.get("YOU_ONLY_FIGURE_ONCE_POWERPOINT_SYNC", "1") == "0":
+        result["dispatch_error"] = "Application synchronization is disabled by YOU_ONLY_FIGURE_ONCE_POWERPOINT_SYNC=0."
         if state is not None:
             state["last_refresh"] = result
             state["refresh_pending"] = True
@@ -593,7 +595,7 @@ end run
     return result
 
 
-def _managed_path(label: str = "scientific-illustrator") -> Path:
+def _managed_path(label: str = "you-only-figure-once") -> Path:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     return STATE_DIR / f"{label}-{time.strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}.pptx"
 
@@ -637,7 +639,7 @@ def _save(prs: Presentation, state: dict, path: Path, *, refresh: bool = True) -
     state["managed_file_mtime_ns"] = path.stat().st_mtime_ns
     state["refresh_pending"] = True
     _write_state(state)
-    deferred = os.environ.get("SCIENTIFIC_ILLUSTRATOR_DEFER_REFRESH", "0") == "1"
+    deferred = os.environ.get("YOU_ONLY_FIGURE_ONCE_DEFER_REFRESH", "0") == "1"
     if refresh and not deferred:
         _refresh_presentation(path, state)
 
@@ -1991,7 +1993,7 @@ def _find_binary(name: str) -> str:
 
 def _render_pdf(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="scientific-illustrator-pdf-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="you-only-figure-once-pdf-") as tmp:
         tmp_path = Path(tmp)
         _run([_find_binary("soffice"), "--headless", "--convert-to", "pdf", "--outdir", str(tmp_path), str(source)], timeout=180)
         generated = tmp_path / f"{source.stem}.pdf"
@@ -2028,7 +2030,7 @@ def action_export_slide_image(args: dict) -> dict:
     output.parent.mkdir(parents=True, exist_ok=True)
     requested_width, requested_height, width, height, preserved = _render_dimensions(path, args)
     slide_index = int(args["slide_index"])
-    with tempfile.TemporaryDirectory(prefix="scientific-illustrator-render-") as tmp:
+    with tempfile.TemporaryDirectory(prefix="you-only-figure-once-render-") as tmp:
         pdf_path = Path(tmp) / "deck.pdf"
         _render_pdf(path, pdf_path)
         jpeg = output.suffix.lower() in (".jpg", ".jpeg")

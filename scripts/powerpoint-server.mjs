@@ -16,20 +16,20 @@ const SUPPORTED_PROTOCOLS = new Set(["2024-11-05", "2025-03-26", "2025-06-18"]);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const BRIDGE_PATH = path.join(SCRIPT_DIR, "powerpoint-bridge.ps1");
 const OOXML_BRIDGE_PATH = path.join(SCRIPT_DIR, "powerpoint-mac-bridge.py");
-const OOXML_STATE_DIR = String(process.env.SCIENTIFIC_ILLUSTRATOR_STATE_DIR || process.env.SCIENTIFIC_ILLUSTRATOR_MAC_DIR || "").trim()
-  || path.join(os.homedir(), ".codex", "scientific-illustrator", "presentations", "sessions", `${process.pid}-${Date.now().toString(36)}`);
+const OOXML_STATE_DIR = String(process.env.YOU_ONLY_FIGURE_ONCE_STATE_DIR || process.env.YOU_ONLY_FIGURE_ONCE_MAC_DIR || "").trim()
+  || path.join(os.homedir(), ".codex", "you-only-figure-once", "presentations", "sessions", `${process.pid}-${Date.now().toString(36)}`);
 const MAX_BUFFER = 20 * 1024 * 1024;
 const officeJsBridge = getOfficeJsBridge();
 const VALID_BACKENDS = new Set(["auto", "officejs", "com", "ooxml"]);
 const VALID_FOCUS_POLICIES = new Set(["preserve", "foreground"]);
-let backendPreference = VALID_BACKENDS.has(String(process.env.SCIENTIFIC_ILLUSTRATOR_PPT_BACKEND || "auto").toLowerCase())
-  ? String(process.env.SCIENTIFIC_ILLUSTRATOR_PPT_BACKEND || "auto").toLowerCase()
+let backendPreference = VALID_BACKENDS.has(String(process.env.YOU_ONLY_FIGURE_ONCE_PPT_BACKEND || "auto").toLowerCase())
+  ? String(process.env.YOU_ONLY_FIGURE_ONCE_PPT_BACKEND || "auto").toLowerCase()
   : "auto";
-let focusPolicy = VALID_FOCUS_POLICIES.has(String(process.env.SCIENTIFIC_ILLUSTRATOR_FOCUS_POLICY || "preserve").toLowerCase())
-  ? String(process.env.SCIENTIFIC_ILLUSTRATOR_FOCUS_POLICY || "preserve").toLowerCase()
+let focusPolicy = VALID_FOCUS_POLICIES.has(String(process.env.YOU_ONLY_FIGURE_ONCE_FOCUS_POLICY || "preserve").toLowerCase())
+  ? String(process.env.YOU_ONLY_FIGURE_ONCE_FOCUS_POLICY || "preserve").toLowerCase()
   : "preserve";
-let hostPreference = ["auto", "powerpoint", "wps"].includes(String(process.env.SCIENTIFIC_ILLUSTRATOR_PPT_HOST || "auto").toLowerCase())
-  ? String(process.env.SCIENTIFIC_ILLUSTRATOR_PPT_HOST || "auto").toLowerCase()
+let hostPreference = ["auto", "powerpoint", "wps"].includes(String(process.env.YOU_ONLY_FIGURE_ONCE_PPT_HOST || "auto").toLowerCase())
+  ? String(process.env.YOU_ONLY_FIGURE_ONCE_PPT_HOST || "auto").toLowerCase()
   : "auto";
 let lockedBackend = null;
 let lockedHost = null;
@@ -619,7 +619,7 @@ const tools = [
   },
   {
     name: "powerpoint_draw_sequence",
-    description: "Apply a paced sequence of native slide, text, shape, line, connector, table, chart, image, grouping, layering, and update operations. Office.js acknowledges every context.sync; file-backed PowerPoint/WPS saves every operation but refreshes the application only at checkpoints by default.",
+    description: "Apply a paced sequence of native slide, text, shape, line, connector, table, chart, image, grouping, layering, and update operations. Windows COM submits the whole sequence through one background bridge process; Office.js acknowledges every context.sync; file-backed PowerPoint/WPS saves every operation but refreshes the application only at checkpoints by default.",
     inputSchema: {
       type: "object",
       required: ["operations"],
@@ -637,8 +637,10 @@ const tools = [
           },
         },
         step_delay_ms: { type: "integer", minimum: 0, maximum: 10000, default: 350 },
-        pacing_mode: { type: "string", enum: ["per_object", "checkpoint", "fast"], default: "checkpoint", description: "Office.js always awaits every context.sync. For file-backed WPS/PowerPoint, per_object refreshes after every object, checkpoint refreshes at checkpoint_size boundaries, and fast refreshes once at the end." },
+        pacing_mode: { type: "string", enum: ["per_object", "checkpoint", "fast"], default: "checkpoint", description: "Office.js always awaits every context.sync. A Windows COM preserve batch uses fast with zero artificial delay when pacing_mode is omitted. For file-backed WPS/PowerPoint, per_object refreshes after every object, checkpoint refreshes at checkpoint_size boundaries, and fast refreshes once at the end." },
         checkpoint_size: { type: "integer", minimum: 1, maximum: 100, default: 10 },
+        return_detail: { type: "string", enum: ["compact", "full"], default: "compact", description: "For the Windows COM batch, compact returns progress and stable object identifiers; full also returns every per-operation bridge result." },
+        focus_policy: { type: "string", enum: ["preserve", "foreground"], description: "Optional sequence-local focus policy. The default is preserve, so background drawing does not repeatedly take over the PowerPoint window. activate_slide remains an explicit visible handoff." },
       },
       additionalProperties: false,
     },
@@ -733,7 +735,7 @@ let cachedOoxmlPython;
 async function ooxmlPythonExecutable() {
   if (cachedOoxmlPython) return cachedOoxmlPython;
   const candidates = [
-    { executable: process.env.SCIENTIFIC_ILLUSTRATOR_PYTHON, args: [] },
+    { executable: process.env.YOU_ONLY_FIGURE_ONCE_PYTHON, args: [] },
     { executable: path.join(SCRIPT_DIR, ".venv", process.platform === "win32" ? "Scripts/python.exe" : "bin/python3"), args: [] },
     {
       executable: process.platform === "win32"
@@ -761,7 +763,7 @@ async function ooxmlPythonExecutable() {
       failures.push(`${candidate.executable}${candidate.args.length ? ` ${candidate.args.join(" ")}` : ""}: ${String(error.message || error).split("\n")[0]}`);
     }
   }
-  throw new Error(`The PowerPoint/WPS OOXML backend requires Python with python-pptx. Run install.sh on macOS/Linux or set SCIENTIFIC_ILLUSTRATOR_PYTHON. Checked: ${failures.join("; ")}`);
+  throw new Error(`The PowerPoint/WPS OOXML backend requires Python with python-pptx. Run install.sh on macOS/Linux or set YOU_ONLY_FIGURE_ONCE_PYTHON. Checked: ${failures.join("; ")}`);
 }
 
 async function runOoxmlBridge(action, args = {}) {
@@ -774,9 +776,9 @@ async function runOoxmlBridge(action, args = {}) {
       maxBuffer: MAX_BUFFER,
       env: {
         ...process.env,
-        SCIENTIFIC_ILLUSTRATOR_STATE_DIR: OOXML_STATE_DIR,
-        SCIENTIFIC_ILLUSTRATOR_FOCUS_POLICY: String(args.focus_policy || focusPolicy),
-        SCIENTIFIC_ILLUSTRATOR_DEFER_REFRESH: args.defer_refresh === true ? "1" : "0",
+        YOU_ONLY_FIGURE_ONCE_STATE_DIR: OOXML_STATE_DIR,
+        YOU_ONLY_FIGURE_ONCE_FOCUS_POLICY: String(args.focus_policy || focusPolicy),
+        YOU_ONLY_FIGURE_ONCE_DEFER_REFRESH: args.defer_refresh === true ? "1" : "0",
       },
     });
     const text = stdout.trim();
@@ -805,7 +807,7 @@ async function windowsPowerPointAvailable() {
 const MUTATING_ACTIONS = new Set([
   "add_slide", "add_textbox", "add_shape", "add_image", "add_line", "add_connector", "add_table",
   "update_table_cell", "update_table_layout", "add_chart", "duplicate_shape", "group_shapes", "ungroup_shape",
-  "set_z_order", "align_shapes", "distribute_shapes", "update_shape", "delete_shape", "activate_slide",
+  "set_z_order", "align_shapes", "distribute_shapes", "update_shape", "delete_shape", "activate_slide", "apply_sequence",
 ]);
 const BACKEND_LOCKING_ACTIONS = new Set([...MUTATING_ACTIONS, "launch", "new_presentation", "save", "close_presentation", "quit_application"]);
 
@@ -886,11 +888,23 @@ async function runOfficeJsBridge(action, args = {}) {
 
 async function runComBridge(action, args = {}) {
   if (process.platform !== "win32") throw new Error("The PowerPoint COM backend is available only on Windows with desktop Microsoft PowerPoint.");
-  const payload = Buffer.from(JSON.stringify({ action, arguments: args }), "utf8").toString("base64");
+  const payloadJson = JSON.stringify({ action, arguments: args });
+  const payload = Buffer.from(payloadJson, "utf8").toString("base64");
+  let payloadFile = null;
   try {
+    const payloadArgs = payload.length <= 12000
+      ? ["-PayloadBase64", payload]
+      : await (async () => {
+          payloadFile = path.join(
+            os.tmpdir(),
+            `you-only-figure-once-ppt-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.json`,
+          );
+          await fs.writeFile(payloadFile, payloadJson, "utf8");
+          return ["-PayloadFile", payloadFile];
+        })();
     const { stdout } = await execFileAsync(
       powershellExecutable(),
-      ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", BRIDGE_PATH, "-PayloadBase64", payload],
+      ["-NoLogo", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", BRIDGE_PATH, ...payloadArgs],
       { encoding: "utf8", windowsHide: true, maxBuffer: MAX_BUFFER },
     );
     const text = stdout.trim();
@@ -899,6 +913,8 @@ async function runComBridge(action, args = {}) {
   } catch (error) {
     const details = String(error.stderr || error.stdout || error.message || error).trim();
     throw new Error(details || "PowerPoint bridge failed.");
+  } finally {
+    if (payloadFile) await fs.unlink(payloadFile).catch(() => {});
   }
 }
 
@@ -921,7 +937,7 @@ async function resolveBackend(action, args = {}) {
   }
   if (backendPreference === "officejs") {
     const status = await officeJsStatus(Number(args.wait_for_officejs_ms || args.wait_for_connection_ms || 0));
-    if (!status.connected) throw new Error("Office.js was selected but its PowerPoint task pane is not connected. Prepare and trust the localhost certificate, sideload officejs/manifest.xml, open Scientific Illustrator Live in the current deck, and retry.");
+    if (!status.connected) throw new Error("Office.js was selected but its PowerPoint task pane is not connected. Prepare and trust the localhost certificate, sideload officejs/manifest.xml, open You-Only-Figure-Once Live in the current deck, and retry.");
     return "officejs";
   }
   if (backendPreference === "com") {
@@ -979,7 +995,13 @@ async function runBridge(action, args = {}, forcedBackend = null) {
     }
     lockedHost = lockedHost || selectedHost;
   }
-  if (MUTATING_ACTIONS.has(action)) mutationCount += 1;
+  if (MUTATING_ACTIONS.has(action)) {
+    const reportedCount = Number(value?.object_operations_applied);
+    const appliedMutations = action === "apply_sequence"
+      ? (Number.isFinite(reportedCount) ? Math.max(0, Math.trunc(reportedCount)) : 0)
+      : 1;
+    mutationCount += appliedMutations;
+  }
   if (value && typeof value === "object") {
     value.focus_policy = focusPolicy;
     value.backend_selection = {
@@ -1025,8 +1047,105 @@ async function runSequence(args) {
   const requestedDelay = args.step_delay_ms ?? 350;
   const pacingMode = args.pacing_mode || "checkpoint";
   const checkpointSize = args.checkpoint_size || 10;
+  const returnDetail = args.return_detail || "compact";
   const sequenceHost = requestedHost(args);
   const sequenceBackend = await resolveBackend("status", args);
+
+  if (sequenceBackend === "com") {
+    const requestedFocusPolicy = String(args.focus_policy || focusPolicy).trim().toLowerCase();
+    if (!VALID_FOCUS_POLICIES.has(requestedFocusPolicy)) throw new Error(`Unknown focus policy: ${requestedFocusPolicy}`);
+    const comPacingMode = requestedFocusPolicy === "preserve" && args.pacing_mode === undefined ? "fast" : pacingMode;
+    const comStepDelay = requestedFocusPolicy === "preserve" && args.pacing_mode === undefined ? 0 : requestedDelay;
+    const concreteHost = lockedHost || (sequenceHost === "auto" ? "powerpoint" : sequenceHost);
+    if (concreteHost !== "powerpoint") {
+      throw new Error(`The Windows COM sequence backend can target PowerPoint only, but ${concreteHost} was requested. No object was dispatched.`);
+    }
+
+    // Validate and normalize the entire batch before opening the COM bridge. This
+    // prevents a late malformed operation from leaving an avoidable partial edit.
+    const operations = args.operations.map((source, index) => {
+      const operation = { ...source };
+      const type = String(operation.type || "");
+      if (type === "wait") {
+        const waitMs = Math.max(0, Math.min(10000, Number(operation.ms ?? requestedDelay) || 0));
+        return { type, ms: waitMs };
+      }
+      if (!actionMap[type]) throw new Error(`Unsupported sequence operation at index ${index}: ${type}`);
+      if (type === "activate_slide" && requestedFocusPolicy === "preserve") {
+        throw new Error(`Sequence operation ${index} requests activate_slide, but a preserve-focus COM batch must remain in the background. Set the sequence focus_policy to foreground for an intentional visible handoff. No object was dispatched.`);
+      }
+      if (operation.host_application !== undefined) {
+        const operationHost = requestedHost(operation);
+        if (operationHost !== "auto" && operationHost !== concreteHost) {
+          throw new Error(`Sequence operation ${index} requests ${operationHost}, but the COM sequence target is ${concreteHost}. No object was dispatched.`);
+        }
+      }
+      // One outer preserve policy controls the whole COM call. Per-operation
+      // foreground requests would reintroduce the window-stealing behavior that
+      // batching is intended to eliminate. activate_slide remains explicit.
+      delete operation.focus_policy;
+      operation.host_application = concreteHost;
+      operation.pause_after_ms = 0;
+      return operation;
+    });
+
+    const bridgeResult = await runBridge("apply_sequence", {
+      operations,
+      step_delay_ms: comStepDelay,
+      pacing_mode: comPacingMode,
+      checkpoint_size: checkpointSize,
+      return_detail: returnDetail,
+      host_application: concreteHost,
+      focus_policy: requestedFocusPolicy,
+    }, "com");
+    if (!bridgeResult || typeof bridgeResult !== "object" || Array.isArray(bridgeResult)) {
+      throw new Error("PowerPoint COM batch returned an invalid result.");
+    }
+
+    const appliedCount = Number.isFinite(Number(bridgeResult.applied_count))
+      ? Math.max(0, Math.trunc(Number(bridgeResult.applied_count)))
+      : 0;
+    const objectCount = Number.isFinite(Number(bridgeResult.object_operations_applied))
+      ? Math.max(0, Math.trunc(Number(bridgeResult.object_operations_applied)))
+      : 0;
+    const failedIndex = bridgeResult.failed_index === null || bridgeResult.failed_index === undefined
+      ? null
+      : Number(bridgeResult.failed_index);
+    const succeeded = bridgeResult.success !== false && failedIndex === null;
+    const common = {
+      ...bridgeResult,
+      success: succeeded,
+      operations_applied: appliedCount,
+      object_operations_applied: objectCount,
+      backend: "com",
+      target_application: bridgeResult.target_application || lockedHost || concreteHost,
+      pacing_mode: comPacingMode,
+      step_delay_ms: comStepDelay,
+      checkpoint_size: checkpointSize,
+      return_detail: returnDetail,
+      context_sync_acknowledged_per_operation: false,
+      file_refresh_strategy: "not-applicable",
+      file_refresh_count: 0,
+      file_refreshes: [],
+      bridge_process_count: 1,
+      focus_policy: requestedFocusPolicy,
+      foreground_preserved: requestedFocusPolicy === "preserve",
+      results: Array.isArray(bridgeResult.results) ? bridgeResult.results : [],
+    };
+    if (succeeded) return common;
+    return {
+      ...common,
+      partial_progress: {
+        applied_count: appliedCount,
+        object_operations_applied: objectCount,
+        failed_index: failedIndex,
+        last_committed_index: bridgeResult.last_committed_index ?? (appliedCount - 1),
+        created_names: Array.isArray(bridgeResult.created_names) ? bridgeResult.created_names : [],
+        refresh_pending: bridgeResult.refresh_pending === true,
+      },
+    };
+  }
+
   const results = [];
   const fileRefreshes = [];
   let pendingFileRefresh = false;
@@ -1091,6 +1210,7 @@ async function runSequence(args) {
     throw error;
   }
   return {
+    success: true,
     operations_applied: results.length,
     object_operations_applied: appliedObjects,
     backend: sequenceBackend,
@@ -1098,6 +1218,7 @@ async function runSequence(args) {
     pacing_mode: pacingMode,
     step_delay_ms: requestedDelay,
     checkpoint_size: checkpointSize,
+    return_detail: "full",
     context_sync_acknowledged_per_operation: sequenceBackend === "officejs",
     file_refresh_strategy: sequenceBackend === "ooxml" ? pacingMode : "not-applicable",
     file_refresh_count: fileRefreshes.length,
@@ -1107,12 +1228,15 @@ async function runSequence(args) {
 }
 
 async function handleTool(name, args = {}) {
-  if (name === "powerpoint_draw_sequence") return { value: await runSequence(args) };
+  if (name === "powerpoint_draw_sequence") {
+    const value = await runSequence(args);
+    return { value, isError: value?.success === false };
+  }
   if (name === "powerpoint_officejs_status") {
     const value = await officeJsStatus(Number(args.wait_for_connection_ms || 0));
     value.setup = {
-      prepare_command: "node plugins/scientific-illustrator/scripts/officejs-setup.mjs prepare",
-      mac_sideload_command: "node plugins/scientific-illustrator/scripts/officejs-setup.mjs sideload",
+      prepare_command: "node plugins/you-only-figure-once/scripts/officejs-setup.mjs prepare",
+      mac_sideload_command: "node plugins/you-only-figure-once/scripts/officejs-setup.mjs sideload",
       certificate_trust_is_manual: true,
       manifest_path: path.resolve(SCRIPT_DIR, "..", "officejs", "manifest.xml"),
     };
@@ -1126,7 +1250,7 @@ async function handleTool(name, args = {}) {
     }
     if (requested === "officejs") {
       const status = await officeJsStatus(Number(args.wait_for_connection_ms || 0));
-      if (!status.connected) throw new Error("Office.js task pane is not connected. Open Scientific Illustrator Live in the current PowerPoint deck and retry.");
+      if (!status.connected) throw new Error("Office.js task pane is not connected. Open You-Only-Figure-Once Live in the current PowerPoint deck and retry.");
     }
     backendPreference = requested;
     return {
@@ -1254,7 +1378,7 @@ async function handleMessage(message) {
       protocolVersion: SUPPORTED_PROTOCOLS.has(requested) ? requested : "2025-06-18",
       capabilities: { tools: { listChanged: false } },
       serverInfo: { name: SERVER_NAME, version: SERVER_VERSION },
-      instructions: "Control Microsoft PowerPoint or WPS Presentation through the platform-selected backend. Windows PowerPoint prefers COM. Mac PowerPoint prefers a connected Office.js task pane and waits for context.sync after every object so drawing is visible; otherwise it reports and uses the file-backed OOXML fallback. WPS uses OOXML. Ordinary drawing preserves the user's foreground application by default; use powerpoint_set_focus_policy(foreground) only when the user explicitly wants PowerPoint/WPS kept in front, and use powerpoint_activate_slide for an intentional visible handoff. Call powerpoint_status, powerpoint_officejs_status when live Mac drawing is requested, and powerpoint_get_capabilities before editing. Never mix live and file-backed objects in one session, never use OS-level mouse or keyboard automation, preserve reconstructable content as native objects, require atomic raster declarations, and run structure plus renderer review after each region and the whole slide.",
+      instructions: "Control Microsoft PowerPoint or WPS Presentation through the platform-selected backend. Windows PowerPoint prefers COM; submit each logical drawing region with powerpoint_draw_sequence so one background bridge process handles the whole batch. Mac PowerPoint prefers a connected Office.js task pane and waits for context.sync after every object so drawing is visible; otherwise it reports and uses the file-backed OOXML fallback. WPS uses OOXML. Ordinary drawing preserves the user's foreground application by default; use powerpoint_set_focus_policy(foreground) only when the user explicitly wants PowerPoint/WPS kept in front, and use powerpoint_activate_slide only for an intentional visible handoff. Call powerpoint_status, powerpoint_officejs_status when live Mac drawing is requested, and powerpoint_get_capabilities before editing. Never mix live and file-backed objects in one session, never use OS-level mouse or keyboard automation, preserve reconstructable content as native objects, require atomic raster declarations, and run structure plus renderer review after each region and the whole slide.",
     });
   }
   if (method === "ping") return rpcResult(id, {});

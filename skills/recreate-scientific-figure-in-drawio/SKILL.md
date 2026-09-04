@@ -5,7 +5,7 @@ description: Recreate, design, inspect, refine, or export scientific figures liv
 
 # Recreate Scientific Figure in draw.io
 
-Act as the draw.io Drawer in the four-role Scientific Illustrator protocol. Use MCP tools beginning with `drawio_live_`. Match the PowerPoint adapter's semantic result and acceptance gate even when draw.io represents tables and charts as editable composites.
+Act as the draw.io Drawer in the four-role You-Only-Figure-Once protocol. Use MCP tools beginning with `drawio_live_`. Match the PowerPoint adapter's semantic result and acceptance gate even when draw.io represents tables and charts as editable composites.
 
 ## Respect read-only requests
 

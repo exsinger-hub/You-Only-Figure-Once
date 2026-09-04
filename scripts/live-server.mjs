@@ -97,7 +97,7 @@ const tools = [
   },
   {
     name: "drawio_live_get_capabilities",
-    description: "Read the available draw.io graph primitives, registered shapes, edge styles, markers, and the Scientific Illustrator MCP coverage. This never launches draw.io and never changes the canvas; when already connected it also inspects the live renderer registry.",
+    description: "Read the available draw.io graph primitives, registered shapes, edge styles, markers, and the You-Only-Figure-Once MCP coverage. This never launches draw.io and never changes the canvas; when already connected it also inspects the live renderer registry.",
     inputSchema: {
       type: "object",
       properties: {
@@ -828,7 +828,7 @@ async function getCapabilities(args = {}) {
       read_only: true,
       launched_drawio: false,
       active_canvas_modified: false,
-      basis: connected ? ["Scientific Illustrator tool catalog", "live draw.io renderer registry"] : ["Scientific Illustrator tool catalog"],
+      basis: connected ? ["You-Only-Figure-Once tool catalog", "live draw.io renderer registry"] : ["You-Only-Figure-Once tool catalog"],
     },
     host: { platform: process.platform, executable: DRAWIO.executable, executable_source: DRAWIO.source, connected, graph_ready: connected ? Boolean((await liveStatus()).graph_ready) : false },
     native_object_families: nativeObjectFamilies,
@@ -1084,7 +1084,7 @@ async function addShape(args) {
       return { renderer_registered: rendererRegistered, stencil_registered: stencilRegistered };
     `);
     if (!registration.renderer_registered && !registration.stencil_registered) {
-      throw new Error(`Unknown or unloaded draw.io shape "${requestedShape}". Scientific Illustrator refused draw.io's silent rectangle fallback. Use a baseline or registered name from drawio_live_get_capabilities, reconstruct the object from editable primitives, supply an intentional full style, or insert only the smallest irreducible raster region with drawio_live_add_image.`);
+      throw new Error(`Unknown or unloaded draw.io shape "${requestedShape}". You-Only-Figure-Once refused draw.io's silent rectangle fallback. Use a baseline or registered name from drawio_live_get_capabilities, reconstruct the object from editable primitives, supply an intentional full style, or insert only the smallest irreducible raster region with drawio_live_add_image.`);
     }
   }
   let style = explicitStyleOverride ? args.style : shapeContainsFullStyle ? requestedShape : shapeStyle(requestedShape);
@@ -1117,7 +1117,7 @@ async function addShape(args) {
     const detail = renderability.unknown_bare_tokens.length
       ? `unknown style token(s): ${renderability.unknown_bare_tokens.join(", ")}`
       : `unregistered resolved renderer: ${renderability.resolved_shape}`;
-    throw new Error(`The draw.io style for "${requestedShape}" is not renderable (${detail}). Scientific Illustrator refused the renderer's silent rectangle fallback. Use a baseline or registered capability, reconstruct the object from editable primitives, or insert only the smallest irreducible raster region.`);
+    throw new Error(`The draw.io style for "${requestedShape}" is not renderable (${detail}). You-Only-Figure-Once refused the renderer's silent rectangle fallback. Use a baseline or registered capability, reconstruct the object from editable primitives, or insert only the smallest irreducible raster region.`);
   }
   const payload = JSON.stringify({ ...args, requested_shape: requestedShape, resolved_shape: renderability.resolved_shape, shape_validation: explicitStyleOverride || shapeContainsFullStyle ? "verified-explicit-style" : "registered-or-baseline", style });
   const value = await graphEval(`
@@ -1258,7 +1258,7 @@ async function updateTableLayout(args) {
     const table = model.getCell(a.table_id);
     if (!table) throw new Error('Table not found: ' + a.table_id);
     const semanticType = table.value?.getAttribute?.('scientificIllustratorType') || '';
-    if (semanticType !== 'table') throw new Error('Cell is not a Scientific Illustrator editable table: ' + a.table_id);
+    if (semanticType !== 'table') throw new Error('Cell is not a You-Only-Figure-Once editable table: ' + a.table_id);
     const rows = Number(table.value.getAttribute('rows'));
     const columns = Number(table.value.getAttribute('columns'));
     const getCell = (row, column) => {

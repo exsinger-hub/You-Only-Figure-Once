@@ -1,6 +1,6 @@
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$PayloadBase64
+    [string]$PayloadBase64,
+    [string]$PayloadFile
 )
 
 $ErrorActionPreference = "Stop"
@@ -8,11 +8,18 @@ $ErrorActionPreference = "Stop"
 
 function Test-Property {
     param($Object, [string]$Name)
+    if ($Object -is [Collections.IDictionary]) {
+        return $Object.Contains($Name)
+    }
     return $null -ne $Object.PSObject.Properties[$Name]
 }
 
 function Get-Argument {
     param($Object, [string]$Name, $Default = $null)
+    if ($Object -is [Collections.IDictionary]) {
+        if ($Object.Contains($Name)) { return $Object[$Name] }
+        return $Default
+    }
     if (Test-Property $Object $Name) {
         return $Object.PSObject.Properties[$Name].Value
     }
@@ -20,6 +27,14 @@ function Get-Argument {
 }
 
 $script:FocusPolicy = "preserve"
+$script:BatchContext = $null
+$script:SuppressSlideView = $false
+$script:ShapeSummaryDetail = "full"
+$script:CachedOfficeInteropMetadata = $null
+$script:ExplicitActivationPerformed = $false
+$script:PreservedForegroundWindow = [IntPtr]::Zero
+$script:ControlledPowerPointWindow = [IntPtr]::Zero
+$script:ControlledPowerPointProcessId = 0
 
 function Normalize-FocusPolicy {
     param($Value)
@@ -31,11 +46,11 @@ function Normalize-FocusPolicy {
 }
 
 function Initialize-FocusInterop {
-    if (-not ("ScientificIllustrator.FocusWindow" -as [type])) {
+    if (-not ("YouOnlyFigureOnce.FocusWindow" -as [type])) {
         Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-namespace ScientificIllustrator {
+namespace YouOnlyFigureOnce {
     public static class FocusWindow {
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
@@ -45,6 +60,8 @@ namespace ScientificIllustrator {
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")]
+        public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
     }
 }
 "@
@@ -53,19 +70,22 @@ namespace ScientificIllustrator {
 
 function Get-ForegroundWindowHandle {
     Initialize-FocusInterop
-    return [ScientificIllustrator.FocusWindow]::GetForegroundWindow()
+    return [YouOnlyFigureOnce.FocusWindow]::GetForegroundWindow()
 }
 
 function Restore-ForegroundWindow {
     param([IntPtr]$WindowHandle)
     if ($WindowHandle -eq [IntPtr]::Zero) { return }
     Initialize-FocusInterop
-    if ([ScientificIllustrator.FocusWindow]::IsWindow($WindowHandle)) {
-        $null = [ScientificIllustrator.FocusWindow]::SetForegroundWindow($WindowHandle)
+    if ([YouOnlyFigureOnce.FocusWindow]::IsWindow($WindowHandle)) {
+        $null = [YouOnlyFigureOnce.FocusWindow]::SetForegroundWindow($WindowHandle)
     }
 }
 
 function Import-OfficeInteropMetadata {
+    if ($null -ne $script:CachedOfficeInteropMetadata) {
+        return $script:CachedOfficeInteropMetadata
+    }
     $result = [ordered]@{
         office_core = $false
         powerpoint = $false
@@ -87,6 +107,7 @@ function Import-OfficeInteropMetadata {
         $result.excel_chart_types = $true
     }
     catch { $result.errors += "excel chart types: $($_.Exception.Message)" }
+    $script:CachedOfficeInteropMetadata = $result
     return $result
 }
 
@@ -165,7 +186,7 @@ function Invoke-Capabilities {
         [pscustomobject][ordered]@{ family = "z_order"; powerpoint_api = "Shape.ZOrder"; host_supported = $shapeMethods -contains "ZOrder"; editable = $true; preferred_for = @("layering", "backgrounds", "overlays") },
         [pscustomobject][ordered]@{ family = "align"; powerpoint_api = "ShapeRange.Align"; host_supported = $shapeRangeMethods -contains "Align"; editable = $true; preferred_for = @("shared edges", "shared centers", "regular rows and columns") },
         [pscustomobject][ordered]@{ family = "distribute"; powerpoint_api = "ShapeRange.Distribute"; host_supported = $shapeRangeMethods -contains "Distribute"; editable = $true; preferred_for = @("equal horizontal gaps", "equal vertical gaps", "repeated motifs") },
-        [pscustomobject][ordered]@{ family = "figure_audit"; powerpoint_api = "Scientific Illustrator structure and renderer audit"; host_supported = $true; editable = $false; preferred_for = @("text fit", "connector clearance", "repeated layout", "atomic raster review") },
+        [pscustomobject][ordered]@{ family = "figure_audit"; powerpoint_api = "You-Only-Figure-Once structure and renderer audit"; host_supported = $true; editable = $false; preferred_for = @("text fit", "connector clearance", "repeated layout", "atomic raster review") },
         [pscustomobject][ordered]@{ family = "media_or_ole"; powerpoint_api = "Shapes.AddMediaObject2/AddOLEObject"; host_supported = (($shapeCollectionMethods -contains "AddMediaObject2") -or ($shapeCollectionMethods -contains "AddOLEObject")); editable = $true; preferred_for = @("embedded media or external objects") }
     )
 
@@ -243,15 +264,22 @@ function Convert-HexToOfficeRgb {
 
 function Get-PowerPointApplication {
     param([bool]$Create)
+    if ($null -ne $script:BatchContext -and $null -ne $script:BatchContext.Application) {
+        return $script:BatchContext.Application
+    }
     try {
-        return [Runtime.InteropServices.Marshal]::GetActiveObject("PowerPoint.Application")
+        $application = [Runtime.InteropServices.Marshal]::GetActiveObject("PowerPoint.Application")
+        Register-ControlledPowerPointWindow $application
+        return $application
     }
     catch {
         if (-not $Create) {
             return $null
         }
         try {
-            return New-Object -ComObject PowerPoint.Application
+            $application = New-Object -ComObject PowerPoint.Application
+            Register-ControlledPowerPointWindow $application
+            return $application
         }
         catch {
             throw "Unable to start desktop PowerPoint: $($_.Exception.Message)"
@@ -262,11 +290,11 @@ function Get-PowerPointApplication {
 function Get-PowerPointProcessId {
     param($Application)
     if ($null -eq $Application) { return 0 }
-    if ($null -eq ("ScientificIllustrator.NativeWindow" -as [type])) {
+    if ($null -eq ("YouOnlyFigureOnce.NativeWindow" -as [type])) {
         Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
-namespace ScientificIllustrator {
+namespace YouOnlyFigureOnce {
     public static class NativeWindow {
         [DllImport("user32.dll")]
         public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
@@ -275,7 +303,7 @@ namespace ScientificIllustrator {
 "@
     }
     $processIdValue = [uint32]0
-    try { $null = [ScientificIllustrator.NativeWindow]::GetWindowThreadProcessId([IntPtr][int64]$Application.HWND, [ref]$processIdValue) } catch {}
+    try { $null = [YouOnlyFigureOnce.NativeWindow]::GetWindowThreadProcessId([IntPtr][int64]$Application.HWND, [ref]$processIdValue) } catch {}
     if ($processIdValue -gt 0) { return [int]$processIdValue }
     $powerPointProcesses = @(Get-Process -Name POWERPNT -ErrorAction SilentlyContinue)
     if ($powerPointProcesses.Count -eq 1) { return [int]$powerPointProcesses[0].Id }
@@ -284,8 +312,23 @@ namespace ScientificIllustrator {
 
 function Get-ActivePresentation {
     param($Application)
+    if ($null -ne $script:BatchContext -and $null -ne $script:BatchContext.Presentation) {
+        return $script:BatchContext.Presentation
+    }
     if ($null -eq $Application) {
         throw "PowerPoint is not running. Call powerpoint_launch first."
+    }
+    $targetDeck = [string]$env:YOU_ONLY_FIGURE_ONCE_TARGET_DECK
+    if (-not [string]::IsNullOrWhiteSpace($targetDeck)) {
+        $targetFullName = [IO.Path]::GetFullPath($targetDeck)
+        foreach ($openPresentation in @($Application.Presentations)) {
+            try {
+                if ([IO.Path]::GetFullPath([string]$openPresentation.FullName) -ieq $targetFullName) {
+                    return $openPresentation
+                }
+            }
+            catch {}
+        }
     }
     try {
         $presentation = $Application.ActivePresentation
@@ -304,11 +347,61 @@ function Get-Slide {
     if ($Index -lt 1 -or $Index -gt $Presentation.Slides.Count) {
         throw "slide_index $Index is outside the valid range 1..$($Presentation.Slides.Count)."
     }
+    if ($null -ne $script:BatchContext) {
+        $key = [string]$Index
+        if (-not $script:BatchContext.Slides.ContainsKey($key)) {
+            $script:BatchContext.Slides[$key] = $Presentation.Slides.Item($Index)
+        }
+        return $script:BatchContext.Slides[$key]
+    }
     return $Presentation.Slides.Item($Index)
+}
+
+function Get-WindowProcessId {
+    param([IntPtr]$WindowHandle)
+    if ($WindowHandle -eq [IntPtr]::Zero) { return 0 }
+    Initialize-FocusInterop
+    $processIdValue = [uint32]0
+    try { $null = [YouOnlyFigureOnce.FocusWindow]::GetWindowThreadProcessId($WindowHandle, [ref]$processIdValue) } catch {}
+    return [int]$processIdValue
+}
+
+function Restore-PreservedForegroundWindowIfChanged {
+    param([bool]$Force = $false)
+    if ($script:FocusPolicy -ne "preserve" -or $script:ExplicitActivationPerformed -or $script:PreservedForegroundWindow -eq [IntPtr]::Zero) {
+        return
+    }
+    $currentForegroundWindow = Get-ForegroundWindowHandle
+    if ($currentForegroundWindow -eq $script:PreservedForegroundWindow) { return }
+    # Do not pin the user to the window that was active at batch start. Restore
+    # only when a window owned by the controlled PowerPoint process took focus,
+    # or when a known focus-stealing Office API requests it.
+    $currentProcessId = if ($script:ControlledPowerPointProcessId -gt 0) { Get-WindowProcessId $currentForegroundWindow } else { 0 }
+    $controlledPowerPointIsForeground =
+        ($script:ControlledPowerPointWindow -ne [IntPtr]::Zero -and $currentForegroundWindow -eq $script:ControlledPowerPointWindow) -or
+        ($script:ControlledPowerPointProcessId -gt 0 -and $currentProcessId -eq $script:ControlledPowerPointProcessId)
+    if ($Force -or $controlledPowerPointIsForeground) {
+        Restore-ForegroundWindow $script:PreservedForegroundWindow
+    }
+}
+
+function Register-ControlledPowerPointWindow {
+    param($Application)
+    if ($null -eq $Application) { return }
+    try {
+        $script:ControlledPowerPointWindow = [IntPtr][int64]$Application.HWND
+        $script:ControlledPowerPointProcessId = Get-WindowProcessId $script:ControlledPowerPointWindow
+    }
+    catch {}
 }
 
 function Show-Slide {
     param($Application, [int]$Index, [bool]$ForceForeground = $false)
+    # Normal drawing must not alter the user's current PowerPoint view or steal
+    # focus. activate_slide is the only caller that sets ForceForeground.
+    if (-not $ForceForeground -and ($script:FocusPolicy -eq "preserve" -or $script:SuppressSlideView)) {
+        return
+    }
     try {
         if ($null -ne $Application.ActiveWindow) {
             $Application.ActiveWindow.ViewType = 9
@@ -323,10 +416,79 @@ function Show-Slide {
     }
 }
 
+function Get-BatchShapeIndex {
+    param($Slide)
+    if ($null -eq $script:BatchContext) { return $null }
+    $slideId = [string][int]$Slide.SlideID
+    if ($script:BatchContext.ShapeIndexes.ContainsKey($slideId)) {
+        return $script:BatchContext.ShapeIndexes[$slideId]
+    }
+    $index = [ordered]@{
+        ByName = @{}
+        NameCounts = @{}
+        ById = @{}
+    }
+    foreach ($shape in @($Slide.Shapes)) {
+        $nameKey = ([string]$shape.Name).ToLowerInvariant()
+        $idKey = [string][int]$shape.Id
+        $index.ById[$idKey] = $shape
+        if ($index.NameCounts.ContainsKey($nameKey)) {
+            $index.NameCounts[$nameKey] = [int]$index.NameCounts[$nameKey] + 1
+        }
+        else {
+            $index.NameCounts[$nameKey] = 1
+            $index.ByName[$nameKey] = $shape
+        }
+    }
+    $script:BatchContext.ShapeIndexes[$slideId] = $index
+    return $index
+}
+
+function Register-BatchShape {
+    param($Slide, $Shape)
+    if ($null -eq $script:BatchContext -or $null -eq $Shape) { return }
+    $index = Get-BatchShapeIndex $Slide
+    $idKey = [string][int]$Shape.Id
+    if ($index.ById.ContainsKey($idKey)) { return }
+    $nameKey = ([string]$Shape.Name).ToLowerInvariant()
+    $index.ById[$idKey] = $Shape
+    if ($index.NameCounts.ContainsKey($nameKey)) {
+        $index.NameCounts[$nameKey] = [int]$index.NameCounts[$nameKey] + 1
+    }
+    else {
+        $index.NameCounts[$nameKey] = 1
+        $index.ByName[$nameKey] = $Shape
+    }
+}
+
+function Reset-BatchShapeIndex {
+    param($Slide)
+    if ($null -eq $script:BatchContext -or $null -eq $Slide) { return }
+    $slideId = [string][int]$Slide.SlideID
+    $null = $script:BatchContext.ShapeIndexes.Remove($slideId)
+    $null = Get-BatchShapeIndex $Slide
+}
+
 function Find-Shape {
     param($Slide, $Arguments)
     $shapeName = Get-Argument $Arguments "shape_name"
     $shapeId = Get-Argument $Arguments "shape_id"
+    $batchIndex = Get-BatchShapeIndex $Slide
+    if ($null -ne $batchIndex) {
+        if ($null -ne $shapeName) {
+            $nameKey = ([string]$shapeName).ToLowerInvariant()
+            $count = if ($batchIndex.NameCounts.ContainsKey($nameKey)) { [int]$batchIndex.NameCounts[$nameKey] } else { 0 }
+            if ($count -gt 1) { throw "Shape target is ambiguous because semantic name '$shapeName' occurs $count times on slide $($Slide.SlideIndex)." }
+            if ($count -eq 1) { return $batchIndex.ByName[$nameKey] }
+            throw "Shape '$shapeName' was not found on slide $($Slide.SlideIndex)."
+        }
+        if ($null -ne $shapeId) {
+            $idKey = [string][int]$shapeId
+            if ($batchIndex.ById.ContainsKey($idKey)) { return $batchIndex.ById[$idKey] }
+            throw "Shape id $shapeId was not found on slide $($Slide.SlideIndex)."
+        }
+        throw "Provide shape_name or shape_id."
+    }
     $matches = @()
     foreach ($shape in @($Slide.Shapes)) {
         if ($null -ne $shapeName -and $shape.Name -ieq [string]$shapeName) {
@@ -350,6 +512,18 @@ function Find-Shape {
 function Assert-ShapeNameAvailable {
     param($Slide, [string]$Name, $ExceptShape = $null)
     if ([string]::IsNullOrWhiteSpace($Name)) {
+        return
+    }
+    $batchIndex = Get-BatchShapeIndex $Slide
+    if ($null -ne $batchIndex) {
+        $nameKey = $Name.ToLowerInvariant()
+        $count = if ($batchIndex.NameCounts.ContainsKey($nameKey)) { [int]$batchIndex.NameCounts[$nameKey] } else { 0 }
+        if ($count -gt 0) {
+            $indexedShape = $batchIndex.ByName[$nameKey]
+            if ($null -eq $ExceptShape -or $count -gt 1 -or [int]$indexedShape.Id -ne [int]$ExceptShape.Id) {
+                throw "Shape name '$Name' already exists on slide $($Slide.SlideIndex)."
+            }
+        }
         return
     }
     foreach ($shape in @($Slide.Shapes)) {
@@ -377,6 +551,13 @@ function Get-ShapeTag {
 
 function New-ShapeSummary {
     param($Shape)
+    if ($script:ShapeSummaryDetail -eq "compact") {
+        return [ordered]@{
+            id = [int]$Shape.Id
+            name = [string]$Shape.Name
+            type = [int]$Shape.Type
+        }
+    }
     $altText = ""
     try { $altText = [string]$Shape.AlternativeText } catch {}
     $shapeTypeName = ""
@@ -415,11 +596,11 @@ function New-ShapeSummary {
         is_chart = $isChart
         group_item_count = $groupItemCount
     }
-    $rasterReason = Get-ShapeTag $Shape "ScientificIllustratorRasterReason"
-    $sourceTight = Get-ShapeTag $Shape "ScientificIllustratorSourceTightlyCropped"
-    $atomicRaster = Get-ShapeTag $Shape "ScientificIllustratorAtomicRasterUnit"
-    $containsReconstructable = Get-ShapeTag $Shape "ScientificIllustratorContainsReconstructableContent"
-    $decompositionNote = Get-ShapeTag $Shape "ScientificIllustratorDecompositionNote"
+    $rasterReason = Get-ShapeTag $Shape "YouOnlyFigureOnceRasterReason"
+    $sourceTight = Get-ShapeTag $Shape "YouOnlyFigureOnceSourceTightlyCropped"
+    $atomicRaster = Get-ShapeTag $Shape "YouOnlyFigureOnceAtomicRasterUnit"
+    $containsReconstructable = Get-ShapeTag $Shape "YouOnlyFigureOnceContainsReconstructableContent"
+    $decompositionNote = Get-ShapeTag $Shape "YouOnlyFigureOnceDecompositionNote"
     if (-not [string]::IsNullOrWhiteSpace($rasterReason) -or [int]$Shape.Type -eq 13) {
         $summary.raster_reason = $rasterReason
         $summary.source_is_tightly_cropped = $sourceTight
@@ -458,10 +639,10 @@ function New-ShapeSummary {
             $beginY = [double]$Shape.Top
             $endX = [double]$Shape.Left + [double]$Shape.Width
             $endY = [double]$Shape.Top + [double]$Shape.Height
-            $tagBeginX = Get-ShapeTag $Shape "ScientificIllustratorBeginX"
-            $tagBeginY = Get-ShapeTag $Shape "ScientificIllustratorBeginY"
-            $tagEndX = Get-ShapeTag $Shape "ScientificIllustratorEndX"
-            $tagEndY = Get-ShapeTag $Shape "ScientificIllustratorEndY"
+            $tagBeginX = Get-ShapeTag $Shape "YouOnlyFigureOnceBeginX"
+            $tagBeginY = Get-ShapeTag $Shape "YouOnlyFigureOnceBeginY"
+            $tagEndX = Get-ShapeTag $Shape "YouOnlyFigureOnceEndX"
+            $tagEndY = Get-ShapeTag $Shape "YouOnlyFigureOnceEndY"
             if (-not [string]::IsNullOrWhiteSpace($tagBeginX)) { $beginX = [double]$tagBeginX }
             if (-not [string]::IsNullOrWhiteSpace($tagBeginY)) { $beginY = [double]$tagBeginY }
             if (-not [string]::IsNullOrWhiteSpace($tagEndX)) { $endX = [double]$tagEndX }
@@ -477,10 +658,10 @@ function New-ShapeSummary {
                 end_arrow = [int]$Shape.Line.EndArrowheadStyle
                 connector = [int]$Shape.Connector
                 connector_type = $connectorType
-                source_name = Get-ShapeTag $Shape "ScientificIllustratorSourceName"
-                target_name = Get-ShapeTag $Shape "ScientificIllustratorTargetName"
-                start_clearance = Get-ShapeTag $Shape "ScientificIllustratorStartClearance"
-                end_clearance = Get-ShapeTag $Shape "ScientificIllustratorEndClearance"
+                source_name = Get-ShapeTag $Shape "YouOnlyFigureOnceSourceName"
+                target_name = Get-ShapeTag $Shape "YouOnlyFigureOnceTargetName"
+                start_clearance = Get-ShapeTag $Shape "YouOnlyFigureOnceStartClearance"
+                end_clearance = Get-ShapeTag $Shape "YouOnlyFigureOnceEndClearance"
             }
         }
     }
@@ -655,11 +836,15 @@ function Invoke-NewPresentation {
     $application = Get-PowerPointApplication $true
     $application.Visible = -1
     $presentation = $application.Presentations.Add($true)
+    Register-ControlledPowerPointWindow $application
     if ($script:FocusPolicy -eq "foreground") {
         try { $presentation.Windows.Item(1).Activate() } catch {}
     }
-    if ([bool](Get-Argument $Arguments "maximize" $true)) {
+    if ($script:FocusPolicy -eq "foreground" -and [bool](Get-Argument $Arguments "maximize" $true)) {
         try { $application.ActiveWindow.WindowState = 3 } catch {}
+    }
+    if ($script:FocusPolicy -eq "preserve" -and [bool](Get-Argument $Arguments "minimize" $false)) {
+        try { $presentation.Windows.Item(1).WindowState = 2 } catch {}
     }
     $summary = Get-PresentationSummary $application $presentation
     $summary.created = $true
@@ -697,7 +882,9 @@ function Invoke-Launch {
     param($Arguments)
     $application = Get-PowerPointApplication $true
     $visible = [bool](Get-Argument $Arguments "visible" $true)
-    $application.Visible = if ($visible) { -1 } else { 0 }
+    # PowerPoint rejects Application.Visible = 0. Keep the COM host valid and
+    # control background operation through Presentations.Open(..., WithWindow).
+    $application.Visible = -1
     $filePath = Get-Argument $Arguments "file_path"
     $presentation = $null
 
@@ -730,11 +917,15 @@ function Invoke-Launch {
     if ($null -eq $presentation) {
         throw "No active presentation is available and create_if_missing=false."
     }
+    Register-ControlledPowerPointWindow $application
     if ($script:FocusPolicy -eq "foreground") {
         try { $presentation.Windows.Item(1).Activate() } catch {}
     }
-    if ([bool](Get-Argument $Arguments "maximize" $true)) {
+    if ($script:FocusPolicy -eq "foreground" -and [bool](Get-Argument $Arguments "maximize" $true)) {
         try { $application.ActiveWindow.WindowState = 3 } catch {}
+    }
+    if ($script:FocusPolicy -eq "preserve" -and [bool](Get-Argument $Arguments "minimize" $false)) {
+        try { $presentation.Windows.Item(1).WindowState = 2 } catch {}
     }
     $summary = Get-PresentationSummary $application $presentation
     $summary.connected = $true
@@ -892,11 +1083,11 @@ function Invoke-AuditFigure {
     $pictureAudits = @()
     foreach ($shape in $shapes) {
         if ([int]$shape.Type -notin @(11, 13)) { continue }
-        $reason = Get-ShapeTag $shape "ScientificIllustratorRasterReason"
-        $tight = Get-ShapeTag $shape "ScientificIllustratorSourceTightlyCropped"
-        $atomic = Get-ShapeTag $shape "ScientificIllustratorAtomicRasterUnit"
-        $containsNative = Get-ShapeTag $shape "ScientificIllustratorContainsReconstructableContent"
-        $decomposition = Get-ShapeTag $shape "ScientificIllustratorDecompositionNote"
+        $reason = Get-ShapeTag $shape "YouOnlyFigureOnceRasterReason"
+        $tight = Get-ShapeTag $shape "YouOnlyFigureOnceSourceTightlyCropped"
+        $atomic = Get-ShapeTag $shape "YouOnlyFigureOnceAtomicRasterUnit"
+        $containsNative = Get-ShapeTag $shape "YouOnlyFigureOnceContainsReconstructableContent"
+        $decomposition = Get-ShapeTag $shape "YouOnlyFigureOnceDecompositionNote"
         $areaRatio = ([double]$shape.Width * [double]$shape.Height) / $slideArea
         $pictureAudit = [ordered]@{
             name = [string]$shape.Name
@@ -914,7 +1105,11 @@ function Invoke-AuditFigure {
         if ($containsNative -ine "False") { & $addFinding "raster-contains-reconstructable-content" "hard" @([string]$shape.Name) "contains_reconstructable_content is '$containsNative'." "Rebuild all text, borders, arrows, legends, axes, tables, and regular plots as native objects." "No retained picture contains a reconstructable drawing primitive." }
         if ([string]::IsNullOrWhiteSpace($decomposition) -or $decomposition.Trim().Length -lt 8) { & $addFinding "raster-missing-decomposition-note" "hard" @([string]$shape.Name) "No useful decomposition note is serialized." "State what was separated and rebuilt natively, or why no finer semantic split is possible." "A reviewer can verify the atomic decomposition decision from the note." }
         if ($areaRatio -gt $largeRasterRatio) { & $addFinding "large-raster-surface" "warning" @([string]$shape.Name) "Picture occupies $([math]::Round($areaRatio * 100,1))% of the slide, above the $([math]::Round($largeRasterRatio * 100,1))% review threshold." "Visually inspect the source at full resolution and split any independent subimages or reconstructable overlay." "The reviewer confirms the large picture is still one atomic raster field." }
-        $compositeText = "$($shape.Name) $reason $decomposition"
+        # The decomposition note documents what was removed or rebuilt natively.
+        # Including it here turns compliant phrases such as "separated from the
+        # comparison grid" into false hard failures.  Composite evidence must be
+        # present in the retained object's name or irreducibility reason itself.
+        $compositeText = "$($shape.Name) $reason"
         if ($compositeText -match '(?i)(grid|montage|panel|comparison|stack|matrix|multi[- ]?image|multiple images|rows? of|columns? of)') {
             & $addFinding "possible-composite-raster" "hard" @([string]$shape.Name) "Name or reason suggests a composite raster: '$compositeText'." "Split each independent image, mask, heatmap, or error map into its own picture; recreate headings, grid, borders, and legend natively." "No picture name or reason describes a grid, montage, stack, panel, comparison, matrix, or multiple-image region."
         }
@@ -988,7 +1183,10 @@ function Invoke-AuditFigure {
     }
 
     $seriesGroups = @{}
-    foreach ($shape in $summaries) {
+    # Numeric suffixes on ordinary boxes usually denote a repeated row/column.
+    # On line objects they also commonly denote a polyline path or grid strokes,
+    # where cross-axis alignment and equal spacing are intentionally inapplicable.
+    foreach ($shape in @($summaries | Where-Object { [int]$_.type -ne 9 })) {
         $name = [string]$shape.name
         $key = [regex]::Replace($name, '[-_]\d+$', '-*')
         if ($key -eq $name) { continue }
@@ -1218,12 +1416,12 @@ function Invoke-AddImage {
     $altText = if (Test-Property $Arguments "alt_text") { [string](Get-Argument $Arguments "alt_text") } else { "Raster-only visual evidence: $rasterReason" }
     $shape.AlternativeText = $altText
     try {
-        $shape.Tags.Add("ScientificIllustratorRasterReason", $rasterReason)
-        $shape.Tags.Add("ScientificIllustratorSourceTightlyCropped", [string]$sourceIsTight)
-        $shape.Tags.Add("ScientificIllustratorAtomicRasterUnit", [string]$atomicRasterUnit)
-        $shape.Tags.Add("ScientificIllustratorContainsReconstructableContent", [string]$containsReconstructableContent)
-        $shape.Tags.Add("ScientificIllustratorDecompositionNote", $decompositionNote)
-        $shape.Tags.Add("ScientificIllustratorSourcePath", $imagePath)
+        $shape.Tags.Add("YouOnlyFigureOnceRasterReason", $rasterReason)
+        $shape.Tags.Add("YouOnlyFigureOnceSourceTightlyCropped", [string]$sourceIsTight)
+        $shape.Tags.Add("YouOnlyFigureOnceAtomicRasterUnit", [string]$atomicRasterUnit)
+        $shape.Tags.Add("YouOnlyFigureOnceContainsReconstructableContent", [string]$containsReconstructableContent)
+        $shape.Tags.Add("YouOnlyFigureOnceDecompositionNote", $decompositionNote)
+        $shape.Tags.Add("YouOnlyFigureOnceSourcePath", $imagePath)
     }
     catch {}
     Show-Slide $application $slideIndex
@@ -1278,12 +1476,12 @@ function Invoke-AddLine {
     $shape.Line.BeginArrowheadStyle = Get-ArrowStyle ([string](Get-Argument $Arguments "start_arrow" "none"))
     $shape.Line.EndArrowheadStyle = Get-ArrowStyle ([string](Get-Argument $Arguments "end_arrow" "none"))
     try {
-        $shape.Tags.Add("ScientificIllustratorBeginX", [string]$actualBeginX)
-        $shape.Tags.Add("ScientificIllustratorBeginY", [string]$actualBeginY)
-        $shape.Tags.Add("ScientificIllustratorEndX", [string]$actualEndX)
-        $shape.Tags.Add("ScientificIllustratorEndY", [string]$actualEndY)
-        $shape.Tags.Add("ScientificIllustratorStartClearance", [string]$startClearance)
-        $shape.Tags.Add("ScientificIllustratorEndClearance", [string]$endClearance)
+        $shape.Tags.Add("YouOnlyFigureOnceBeginX", [string]$actualBeginX)
+        $shape.Tags.Add("YouOnlyFigureOnceBeginY", [string]$actualBeginY)
+        $shape.Tags.Add("YouOnlyFigureOnceEndX", [string]$actualEndX)
+        $shape.Tags.Add("YouOnlyFigureOnceEndY", [string]$actualEndY)
+        $shape.Tags.Add("YouOnlyFigureOnceStartClearance", [string]$startClearance)
+        $shape.Tags.Add("YouOnlyFigureOnceEndClearance", [string]$endClearance)
     }
     catch {}
     Show-Slide $application $slideIndex
@@ -1313,15 +1511,18 @@ function Invoke-AddConnector {
     $shape.ConnectorFormat.BeginConnect($source, $sourceSite)
     $shape.ConnectorFormat.EndConnect($target, $targetSite)
     $shape.RerouteConnections()
-    $shape.ZOrder(1)
+    # Keep routes behind their endpoint nodes without burying them underneath a
+    # full-slide background shape.  SendToBack made valid connectors invisible;
+    # one SendBackward step preserves the intended local layering.
+    $shape.ZOrder(3)
     Set-ShapeAppearance $shape $Arguments
     $shape.Line.BeginArrowheadStyle = Get-ArrowStyle ([string](Get-Argument $Arguments "start_arrow" "none"))
     $shape.Line.EndArrowheadStyle = Get-ArrowStyle ([string](Get-Argument $Arguments "end_arrow" "triangle"))
     try {
-        $shape.Tags.Add("ScientificIllustratorSourceName", [string]$source.Name)
-        $shape.Tags.Add("ScientificIllustratorTargetName", [string]$target.Name)
-        $shape.Tags.Add("ScientificIllustratorSourceSite", [string]$sourceSite)
-        $shape.Tags.Add("ScientificIllustratorTargetSite", [string]$targetSite)
+        $shape.Tags.Add("YouOnlyFigureOnceSourceName", [string]$source.Name)
+        $shape.Tags.Add("YouOnlyFigureOnceTargetName", [string]$target.Name)
+        $shape.Tags.Add("YouOnlyFigureOnceSourceSite", [string]$sourceSite)
+        $shape.Tags.Add("YouOnlyFigureOnceTargetSite", [string]$targetSite)
     }
     catch {}
     Show-Slide $application $slideIndex
@@ -1548,6 +1749,10 @@ function Invoke-AddChart {
         $chart = $shape.Chart
         $chartData = $chart.ChartData
         $chartData.Activate()
+        # ChartData.Activate can briefly foreground PowerPoint or its embedded
+        # workbook even when normal shape operations do not. Restore the user's
+        # prior app immediately, then continue populating the chart in place.
+        Restore-PreservedForegroundWindowIfChanged $true
         for ($attempt = 0; $attempt -lt 30 -and $null -eq $workbook; $attempt += 1) {
             try { $workbook = $chartData.Workbook } catch {}
             if ($null -eq $workbook) { Start-Sleep -Milliseconds 200 }
@@ -1592,6 +1797,7 @@ function Invoke-AddChart {
             $axis.AxisTitle.Text = [string](Get-Argument $Arguments "value_axis_title")
         }
         try { $workbook.Close($true) } catch {}
+        Restore-PreservedForegroundWindowIfChanged $true
         $workbook = $null
         Show-Slide $application $slideIndex
         $summary = New-ShapeSummary $shape
@@ -1877,6 +2083,234 @@ function Invoke-QuitApplication {
     return [ordered]@{ quit = $true; process_id = $actualProcessId; presentation_count = 0 }
 }
 
+function Get-CompactSequenceResult {
+    param([int]$Index, [string]$Type, $Result)
+    $receipt = [ordered]@{
+        index = $Index
+        type = $Type
+    }
+    if ($null -eq $Result) { return $receipt }
+    foreach ($propertyName in @("slide_index", "slide_id", "id", "name", "deleted", "updated", "activated", "grouped", "ungrouped", "member_count", "table_name", "row", "column")) {
+        if (Test-Property $Result $propertyName) {
+            $receipt[$propertyName] = Get-Argument $Result $propertyName
+        }
+    }
+    if (Test-Property $Result "type") { $receipt.object_type_id = Get-Argument $Result "type" }
+    if (Test-Property $Result "shape") {
+        $shapeResult = Get-Argument $Result "shape"
+        if (Test-Property $shapeResult "id") { $receipt.id = Get-Argument $shapeResult "id" }
+        if (Test-Property $shapeResult "name") { $receipt.name = Get-Argument $shapeResult "name" }
+    }
+    if (Test-Property $Result "members") {
+        $receipt.member_names = @(
+            @(Get-Argument $Result "members") |
+                ForEach-Object { if (Test-Property $_ "name") { [string](Get-Argument $_ "name") } } |
+                Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        )
+    }
+    return $receipt
+}
+
+function Update-BatchShapeIndexAfterOperation {
+    param([string]$Type, $Arguments, $Result)
+    if ($null -eq $script:BatchContext) { return }
+    if ($Type -eq "add_slide") {
+        # Insertion can shift every subsequent slide index. Clear only the cheap
+        # caches; the already bound presentation and application remain stable.
+        $script:BatchContext.Slides.Clear()
+        $script:BatchContext.ShapeIndexes.Clear()
+        return
+    }
+    if (-not (Test-Property $Arguments "slide_index")) { return }
+    $slideIndex = [int](Get-Argument $Arguments "slide_index")
+    $slide = Get-Slide $script:BatchContext.Presentation $slideIndex
+    if ($Type -in @("group_shapes", "ungroup_shape", "delete_shape") -or
+        ($Type -eq "update_shape" -and (Test-Property $Arguments "new_name"))) {
+        Reset-BatchShapeIndex $slide
+        return
+    }
+    if ($Type -notin @("add_textbox", "add_shape", "add_image", "add_line", "add_connector", "add_table", "add_chart", "duplicate_shape")) {
+        return
+    }
+    $createdName = if (Test-Property $Result "name") { [string](Get-Argument $Result "name") } else { "" }
+    $createdId = if (Test-Property $Result "id") { [int](Get-Argument $Result "id") } else { 0 }
+    $createdShape = $null
+    if (-not [string]::IsNullOrWhiteSpace($createdName)) {
+        try { $createdShape = $slide.Shapes.Item($createdName) } catch {}
+    }
+    if ($null -eq $createdShape -and $createdId -gt 0) {
+        foreach ($shape in @($slide.Shapes)) {
+            if ([int]$shape.Id -eq $createdId) { $createdShape = $shape; break }
+        }
+    }
+    if ($null -eq $createdShape) {
+        Reset-BatchShapeIndex $slide
+        return
+    }
+    Register-BatchShape $slide $createdShape
+}
+
+function Invoke-ApplySequence {
+    param($Arguments)
+    $operations = @(Get-Argument $Arguments "operations")
+    if ($operations.Count -lt 1) { throw "apply_sequence requires at least one operation." }
+    if ($operations.Count -gt 500) { throw "apply_sequence supports at most 500 operations." }
+
+    $returnDetail = ([string](Get-Argument $Arguments "return_detail" "compact")).Trim().ToLowerInvariant()
+    if ($returnDetail -notin @("compact", "full")) { throw "return_detail must be compact or full." }
+    $pacingMode = ([string](Get-Argument $Arguments "pacing_mode" "checkpoint")).Trim().ToLowerInvariant()
+    if ($pacingMode -notin @("per_object", "checkpoint", "fast")) { throw "pacing_mode must be per_object, checkpoint, or fast." }
+    $checkpointSize = [int](Get-Argument $Arguments "checkpoint_size" 10)
+    if ($checkpointSize -lt 1 -or $checkpointSize -gt 100) { throw "checkpoint_size must be between 1 and 100." }
+    $stepDelayMs = [int](Get-Argument $Arguments "step_delay_ms" 0)
+    if ($stepDelayMs -lt 0 -or $stepDelayMs -gt 10000) { throw "step_delay_ms must be between 0 and 10000." }
+
+    # Bind once. Every existing Invoke-* function then reuses these objects via
+    # Get-PowerPointApplication/Get-ActivePresentation/Get-Slide.
+    $application = Get-PowerPointApplication $false
+    $presentation = Get-ActivePresentation $application
+    $previousBatchContext = $script:BatchContext
+    $previousSuppressSlideView = $script:SuppressSlideView
+    $previousSummaryDetail = $script:ShapeSummaryDetail
+    $script:BatchContext = [pscustomobject][ordered]@{
+        Application = $application
+        Presentation = $presentation
+        Slides = @{}
+        ShapeIndexes = @{}
+    }
+    $script:SuppressSlideView = $true
+    $script:ShapeSummaryDetail = $returnDetail
+
+    $actionMap = @{
+        add_slide = "add_slide"
+        add_textbox = "add_textbox"
+        add_shape = "add_shape"
+        add_image = "add_image"
+        add_line = "add_line"
+        add_connector = "add_connector"
+        add_table = "add_table"
+        update_table_cell = "update_table_cell"
+        update_table_layout = "update_table_layout"
+        add_chart = "add_chart"
+        duplicate_shape = "duplicate_shape"
+        group_shapes = "group_shapes"
+        ungroup_shape = "ungroup_shape"
+        set_z_order = "set_z_order"
+        align_shapes = "align_shapes"
+        distribute_shapes = "distribute_shapes"
+        update_shape = "update_shape"
+        delete_shape = "delete_shape"
+        activate_slide = "activate_slide"
+    }
+    $results = New-Object System.Collections.ArrayList
+    $createdNames = New-Object System.Collections.ArrayList
+    $appliedCount = 0
+    $objectOperationsApplied = 0
+    $lastCommittedIndex = -1
+    $failedIndex = $null
+    $operationError = $null
+    $lastSlideIndex = 0
+    try {
+        for ($index = 0; $index -lt $operations.Count; $index += 1) {
+            $operation = $operations[$index]
+            $type = ([string](Get-Argument $operation "type")).Trim().ToLowerInvariant()
+            try {
+                if ($type -eq "wait") {
+                    $waitMs = [int](Get-Argument $operation "ms" $stepDelayMs)
+                    if ($waitMs -lt 0 -or $waitMs -gt 10000) { throw "wait.ms must be between 0 and 10000." }
+                    if ($waitMs -gt 0) { Start-Sleep -Milliseconds $waitMs }
+                    $waitReceipt = [ordered]@{ index = $index; type = "wait"; waited_ms = $waitMs }
+                    $null = $results.Add($waitReceipt)
+                    $appliedCount += 1
+                    $lastCommittedIndex = $index
+                    continue
+                }
+                if (-not $actionMap.ContainsKey($type)) {
+                    throw "Unsupported sequence operation at index $index`: $type"
+                }
+                $action = $actionMap[$type]
+                if (Test-Property $operation "slide_index") { $lastSlideIndex = [int](Get-Argument $operation "slide_index") }
+                $rawResult = Invoke-Action $action $operation
+                if ($type -eq "activate_slide") { $script:ExplicitActivationPerformed = $true }
+                Update-BatchShapeIndexAfterOperation $type $operation $rawResult
+
+                $entry = if ($returnDetail -eq "full") {
+                    [ordered]@{ index = $index; type = $type; result = $rawResult }
+                }
+                else {
+                    Get-CompactSequenceResult $index $type $rawResult
+                }
+                $null = $results.Add($entry)
+                if ($type -in @("add_textbox", "add_shape", "add_image", "add_line", "add_connector", "add_table", "add_chart", "duplicate_shape", "group_shapes") -and
+                    (Test-Property $rawResult "name")) {
+                    $createdName = [string](Get-Argument $rawResult "name")
+                    if (-not [string]::IsNullOrWhiteSpace($createdName) -and $createdNames -inotcontains $createdName) {
+                        $null = $createdNames.Add($createdName)
+                    }
+                }
+                $appliedCount += 1
+                $objectOperationsApplied += 1
+                $lastCommittedIndex = $index
+
+                if ($script:FocusPolicy -eq "preserve" -and -not $script:ExplicitActivationPerformed) {
+                    Restore-PreservedForegroundWindowIfChanged
+                }
+                $checkpointReached = $pacingMode -eq "per_object" -or
+                    ($pacingMode -eq "checkpoint" -and $objectOperationsApplied % $checkpointSize -eq 0)
+                if ($checkpointReached) {
+                    if ($script:FocusPolicy -eq "foreground" -and $lastSlideIndex -gt 0) {
+                        $script:SuppressSlideView = $false
+                        Show-Slide $application $lastSlideIndex
+                        $script:SuppressSlideView = $true
+                    }
+                    if ($stepDelayMs -gt 0) { Start-Sleep -Milliseconds $stepDelayMs }
+                }
+            }
+            catch {
+                $failedIndex = $index
+                $operationError = [ordered]@{
+                    message = [string]$_.Exception.Message
+                    position = [string]$_.InvocationInfo.PositionMessage
+                    stack = [string]$_.ScriptStackTrace
+                }
+                break
+            }
+        }
+        if ($script:FocusPolicy -eq "foreground" -and $lastSlideIndex -gt 0) {
+            $script:SuppressSlideView = $false
+            Show-Slide $application $lastSlideIndex
+            $script:SuppressSlideView = $true
+        }
+    }
+    finally {
+        if ($script:FocusPolicy -eq "preserve" -and -not $script:ExplicitActivationPerformed) {
+            Restore-PreservedForegroundWindowIfChanged
+        }
+        $script:ShapeSummaryDetail = $previousSummaryDetail
+        $script:SuppressSlideView = $previousSuppressSlideView
+        $script:BatchContext = $previousBatchContext
+    }
+
+    return [ordered]@{
+        success = $null -eq $failedIndex
+        applied_count = $appliedCount
+        object_operations_applied = $objectOperationsApplied
+        failed_index = $failedIndex
+        last_committed_index = $lastCommittedIndex
+        created_names = @($createdNames)
+        refresh_pending = $false
+        view_untouched = $script:FocusPolicy -eq "preserve" -and -not $script:ExplicitActivationPerformed
+        explicit_activation_performed = $script:ExplicitActivationPerformed
+        backend = "powerpoint"
+        pacing_mode = $pacingMode
+        checkpoint_size = $checkpointSize
+        step_delay_ms = $stepDelayMs
+        return_detail = $returnDetail
+        results = @($results)
+        error = $operationError
+    }
+}
+
 function Invoke-Action {
     param([string]$Action, $Arguments)
     switch ($Action) {
@@ -1909,22 +2343,38 @@ function Invoke-Action {
         "save" { return Invoke-Save $Arguments }
         "close_presentation" { return Invoke-ClosePresentation $Arguments }
         "quit_application" { return Invoke-QuitApplication $Arguments }
+        "apply_sequence" { return Invoke-ApplySequence $Arguments }
+        "sequence" { return Invoke-ApplySequence $Arguments }
         default { throw "Unknown PowerPoint bridge action: $Action" }
     }
 }
 
 try {
-    $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PayloadBase64))
+    $json = $null
+    $hasInlinePayload = -not [string]::IsNullOrWhiteSpace($PayloadBase64)
+    $hasFilePayload = -not [string]::IsNullOrWhiteSpace($PayloadFile)
+    if ($hasInlinePayload -eq $hasFilePayload) {
+        throw "Specify exactly one of -PayloadBase64 or -PayloadFile."
+    }
+    if ($hasFilePayload) {
+        $payloadPath = [IO.Path]::GetFullPath($PayloadFile)
+        if (-not [IO.File]::Exists($payloadPath)) { throw "PowerPoint bridge payload file not found: $payloadPath" }
+        $json = [IO.File]::ReadAllText($payloadPath, [Text.Encoding]::UTF8)
+    }
+    else {
+        $json = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($PayloadBase64))
+    }
     $payload = $json | ConvertFrom-Json
-    $requestedFocusPolicy = Get-Argument $payload.arguments "focus_policy" $env:SCIENTIFIC_ILLUSTRATOR_FOCUS_POLICY
+    $requestedFocusPolicy = Get-Argument $payload.arguments "focus_policy" $env:YOU_ONLY_FIGURE_ONCE_FOCUS_POLICY
     $script:FocusPolicy = Normalize-FocusPolicy $requestedFocusPolicy
     $previousForegroundWindow = if ($script:FocusPolicy -eq "preserve") { Get-ForegroundWindowHandle } else { [IntPtr]::Zero }
+    $script:PreservedForegroundWindow = $previousForegroundWindow
     try {
         $result = Invoke-Action ([string]$payload.action) $payload.arguments
     }
     finally {
-        if ($script:FocusPolicy -eq "preserve" -and [string]$payload.action -ne "activate_slide") {
-            Restore-ForegroundWindow $previousForegroundWindow
+        if ($script:FocusPolicy -eq "preserve" -and [string]$payload.action -ne "activate_slide" -and -not $script:ExplicitActivationPerformed) {
+            Restore-PreservedForegroundWindowIfChanged
         }
     }
     [Console]::Out.Write(($result | ConvertTo-Json -Depth 12 -Compress))
